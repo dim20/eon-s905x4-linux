@@ -172,14 +172,45 @@ fi
 # works. The drop-in disables PrivateUsers for that unit.
 if [ -d "$HERE/overrides" ]; then
     for src in "$HERE"/overrides/*; do
-        [ -d "$src" ] || continue
+        [ -e "$src" ] || continue
         name=$(basename "$src")
-        dest="$ROOTFS_TREE/etc/systemd/system/$name"
-        mkdir -p "$dest"
-        cp -a "$src/." "$dest/"
-        log "  applied override: $name"
+        if [ -d "$src" ]; then
+            # a drop-in directory: e.g. chrony-wait.service.d/
+            dest="$ROOTFS_TREE/etc/systemd/system/$name"
+            mkdir -p "$dest"
+            cp -a "$src/." "$dest/"
+            log "  applied override: $name"
+        else
+            # a whole unit file: e.g. enable-hdmi.service
+            cp -a "$src" "$ROOTFS_TREE/etc/systemd/system/$name"
+            log "  installed unit: $name"
+        fi
     done
 fi
+
+# ---------------------------------------------------------------- HDMI
+# The HDMI output needs two things, and neither happens on its own:
+#   * the DTB's fb node enabled (status = "okay"), which is what makes the
+#     vendor's OSD framebuffer driver bind and create /dev/fb0. This is a
+#     change to the DTB, and the DTB is copied into the image separately.
+#   * a mode set at every boot, because the vendor driver leaves the HDMI
+#     connector disabled and a mode set is not persistent.
+# The script does the second; the unit and the rescue-init hook call it.
+if [ -f "$HERE/enable-hdmi.sh" ]; then
+    cp -a "$HERE/enable-hdmi.sh" "$ROOTFS_TREE/root/"
+    chmod 0755 "$ROOTFS_TREE/root/enable-hdmi.sh"
+    log "  installed enable-hdmi.sh"
+fi
+
+# The rest of the scripts the image needs in /root. Installing them here
+# means a build from a plain Debian rootfs is complete, rather than relying
+# on the source tree having been prepared with them already.
+for s in rescue-init.sh install-to-emmc.sh find-env.sh prepare-stick.sh grow-stick.sh; do
+    [ -f "$HERE/$s" ] || continue
+    cp -a "$HERE/$s" "$ROOTFS_TREE/root/$s"
+    chmod 0755 "$ROOTFS_TREE/root/$s"
+    log "  installed $s"
+done
 
 # mke2fs -d populates the filesystem from the directory at creation time.
 # No mount and no loop device, which is what makes this buildable on a

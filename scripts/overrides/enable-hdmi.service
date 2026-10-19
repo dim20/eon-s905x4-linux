@@ -1,0 +1,28 @@
+[Unit]
+Description=Enable the HDMI display output
+Documentation=man:modetest(1)
+# NB: deliberately NO dependency on dev-dri-card0.device.
+#
+# That device unit never settles on this box — udev does not finish
+# processing the DRM device — so depending on it leaves
+# multi-user.target WAITING FOREVER and the system stops at "starting".
+# The DRM driver has already created the connector by the time this unit
+# runs, so the dependency buys nothing and costs the whole boot.
+#
+# If the connector is not there yet, the script finds nothing to do and
+# exits; the display then comes up on the next boot.
+ConditionPathExists=/sys/class/drm/card0-HDMI-A-1/status
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The vendor driver leaves the HDMI connector disabled, so the screen stays
+# blank until a mode is set. A mode set is runtime state and has to be
+# redone on every boot.
+ExecStart=/root/enable-hdmi.sh
+# Never let a display problem stop the box from reaching multi-user.
+SuccessExitStatus=0
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

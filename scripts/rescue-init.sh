@@ -157,6 +157,22 @@ NETPID=$!
 # Backgrounded deliberately: it must never block or kill the serial console.
 ( while true; do /sbin/agetty --noreset --noclear tty1 vt220; sleep 1; done ) &
 
+# ---------------------------------------------------------------- HDMI output
+# The vendor DRM driver exposes the HDMI connector but never enables it: it
+# sits at "disabled" and the screen stays blank. A mode set is needed, and it
+# is runtime state, so it has to be redone on every boot.
+#
+# The DTB's fb node is enabled in the shipped device tree, which is what makes
+# the OSD framebuffer driver bind and create /dev/fb0 at all.
+#
+# Best effort: no display attached, no modetest, or a driver that refuses
+# the mode set must never stop the box from booting.
+hdmi_setup() {
+    [ -x /root/enable-hdmi.sh ] || return 0
+    /root/enable-hdmi.sh 2>&1 | sed 's/^/[hdmi] /'
+}
+hdmi_setup &
+
 # ---------------------------------------------------------------- serial console
 # Foreground. This is the recovery path - nothing above may prevent it.
 echo "Starting serial console on ttyS0..."
