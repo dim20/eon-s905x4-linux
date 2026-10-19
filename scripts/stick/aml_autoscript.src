@@ -19,8 +19,19 @@
 # The boot artefacts live at the ROOT of the FAT boot partition (not in d/),
 # so the paths here are flat: "Image" and "sc2_s905x4_ah212_linux.dtb".
 #
+# init= selects the init system. systemd gives a real multi-user system.
+# /root/rescue-init.sh is ALSO installed on the stick and is a working
+# fallback: if systemd ever fails, interrupt the boot at the U-Boot prompt
+# (bootdelay=3 gives you a window) and change init= to /root/rescue-init.sh.
+#
 # NOTE the single quotes around bootargs. Escaped double quotes store literal
 # backslashes, which corrupts the kernel command line and resets the CPU.
+#
+# The payload is executed by U-Boot's hush parser, so it must not contain
+# quotes in comments: an unbalanced quote puts the parser into its ">"
+# continuation prompt and the script never runs. The commented version of
+# this file is kept as documentation; the uImage is built from a
+# comment-stripped copy.
 #
 # This file is MIT-licensed (see LICENSE in the repository root). The kernel
 # and DTB it loads are GPL-2.0 — see kernel/GPL-2.0-NOTICE.md.
@@ -28,5 +39,5 @@
 usb start 0
 fatload usb 0:1 0x2000000 Image
 fatload usb 0:1 0x5000000 sc2_s905x4_ah212_linux.dtb
-setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'
+setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/lib/systemd/systemd'
 booti 0x2000000 - 0x5000000

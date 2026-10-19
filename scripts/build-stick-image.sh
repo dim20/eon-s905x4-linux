@@ -136,10 +136,76 @@ else
     log "  ownership already root:root"
 fi
 
+# ---------------------------------------------------------------- mount points
+# The kernel INITIALISES devtmpfs but does not mount it (CONFIG_DEVTMPFS_MOUNT
+# is not set on this kernel), so the rootfs must contain the directories the
+# init mounts onto. A rootfs with no /dev boots and then dies at the login
+# prompt with "cannot create /dev/null: Directory nonexistent" — every
+# command that redirects output fails.
+for d in dev proc sys run tmp; do
+    if [ ! -d "$ROOTFS_TREE/$d" ]; then
+        mkdir -p "$ROOTFS_TREE/$d"
+        chmod 0755 "$ROOTFS_TREE/$d"
+        log "  created the missing /$d mount point"
+    fi
+done
+[ -d "$ROOTFS_TREE/tmp" ] && chmod 1777 "$ROOTFS_TREE/tmp"
+
+# ---------------------------------------------------------------- machine-id
+# The machine-id must NOT be shipped in the image. Every box flashed with
+# the same image would otherwise share one identity, which is wrong and can
+# confuse services that key on it. systemd generates a transient one when
+# the file is absent and persists it on first boot, so each box gets its own.
+if [ -e "$ROOTFS_TREE/etc/machine-id" ]; then
+    rm -f "$ROOTFS_TREE/etc/machine-id"
+    log "  removed the machine-id — systemd will generate a unique one per box"
+fi
+
+# ---------------------------------------------------------------- overrides
+# Drop-in unit overrides that the image needs on this hardware. They are
+# applied to the source tree before it is built into the image, so a rebuilt
+# image gets them automatically.
+#
+# scripts/overrides/chrony-wait.service.d/ — this kernel has CONFIG_USER_NS
+# unset, so chrony-wait.service cannot set up a user namespace and fails,
+# leaving the system "degraded" with one failed unit even though everything
+# works. The drop-in disables PrivateUsers for that unit.
+if [ -d "$HERE/overrides" ]; then
+    for src in "$HERE"/overrides/*; do
+        [ -d "$src" ] || continue
+        name=$(basename "$src")
+        dest="$ROOTFS_TREE/etc/systemd/system/$name"
+        mkdir -p "$dest"
+        cp -a "$src/." "$dest/"
+        log "  applied override: $name"
+    done
+fi
+
 # mke2fs -d populates the filesystem from the directory at creation time.
 # No mount and no loop device, which is what makes this buildable on a
 # machine where the loop module cannot be loaded.
 mke2fs -q -F -t ext4 -L ROOTFS -d "$ROOTFS_TREE" "$WORK/p2.img" || die "mke2fs failed"
+
+# Check the SOURCE before trusting the result. mke2fs -d does not complain
+# about an empty or truncated directory: it builds a filesystem containing
+# exactly what it was given, which may be nothing. A rootfs with no /dev
+# boots to a dead login prompt, and a rootfs with no files is not a rootfs.
+SRC_FILES=$(find "$ROOTFS_TREE" -type f 2>/dev/null | wc -l)
+[ "$SRC_FILES" -gt 1000 ] || die "the source tree has only $SRC_FILES files — that is not a rootfs.
+  Refusing to build an image from it."
+for d in dev proc sys run tmp etc usr root; do
+    [ -d "$ROOTFS_TREE/$d" ] || die "the source tree has no /$d directory.
+  The init mounts onto these; without them the image will not boot."
+done
+log "  source tree: $SRC_FILES files"
+
+# Check the RESULT. The cheapest and most sensitive signal that the
+# filesystem actually got populated is how well it compresses: a real
+# 670 MB rootfs gzips to a few hundred MB, an empty one to almost nothing.
+P2_GZ=$(gzip -9 -c "$WORK/p2.img" | wc -c)
+log "  p2 compresses to $(( P2_GZ / 1048576 )) MiB"
+[ "$P2_GZ" -gt 50000000 ] || die "the built p2 compresses to only $P2_GZ bytes — it is almost empty.
+  The source tree was probably not what you thought. Refusing to continue."
 
 # Verify the result by extracting it back out and diffing against the
 # source. A copy that silently skipped an unreadable file (mode 0640, for

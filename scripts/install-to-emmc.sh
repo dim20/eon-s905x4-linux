@@ -117,6 +117,21 @@ DTB_SRC="$SRC/${BOOTDIR:+$BOOTDIR/}$DTB_NAME"
 USB_PREFIX=""
 [ -n "$BOOTDIR" ] && USB_PREFIX="$BOOTDIR/"
 
+# INIT selects the init system for BOTH branches:
+#   systemd  - a real multi-user system: apt, services, a proper journal
+#   rescue   - the minimal shell, kept as a fallback if systemd is broken
+# Both are installed in the rootfs, so either can be selected later at the
+# U-Boot prompt (bootdelay=3 gives you one) by editing init= in bootargs.
+#
+# Defined at the top level, not inside the branch below: the manual
+# instructions in the fallback path use it too.
+INIT=${INIT:-systemd}
+case "$INIT" in
+    systemd) INIT_PATH=/lib/systemd/systemd ;;
+    rescue)  INIT_PATH=/root/rescue-init.sh ;;
+    *) die "INIT must be 'systemd' or 'rescue', not '$INIT'" ;;
+esac
+
 log "checking source hashes BEFORE writing anything"
 got=$(sha256sum "$KERNEL_SRC" | cut -d' ' -f1)
 if [ "${VERIFY_SKIP:-0}" != 1 ] && [ "$got" != "$EXPECT_IMAGE" ]; then
@@ -290,8 +305,10 @@ if [ -n "$ENV_CONF" ] && [ "$ENV_ERASE" = 1 ] && [ -f "$ENV_CONF" ]; then
     # non-existent d/Image — and the USB branch would fail SILENTLY, falling
     # through to the eMMC branch. The stick would then look like it had no
     # effect at all.
+    # INIT and INIT_PATH are defined at the top level, so they are in scope
+    # here and in the manual-instruction fallback path below.
     BOOTCMD=$(cat <<EOF
-usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'; booti 0x2000000 - 0x5000000; fi
+usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'; booti 0x2000000 - 0x5000000; fi
 EOF
 )
 
@@ -306,6 +323,28 @@ EOF
         fi
     else
         log "  ERROR: fw_setenv failed. The box will not boot unattended."
+    fi
+
+    # bootdelay: a "Hit any key to stop autoboot" window at the U-Boot prompt.
+    # This is the recovery path for a box whose rootfs will not boot — with a
+    # serial adapter attached you can reach U-Boot and fix it, without a USB
+    # stick, without ADNL and without fastboot.
+    #
+    # U-Boot checks bootdelay BEFORE running bootcmd, so this works even
+    # though the saved bootcmd replaces the vendor's entirely. Verified:
+    # "Hit any key to stop autoboot:  3  2  1  0" with a custom bootcmd.
+    #
+    # It costs N seconds on EVERY boot. Set BOOTDELAY=0 to disable it.
+    BOOTDELAY=${BOOTDELAY:-3}
+    if fw_setenv bootdelay "$BOOTDELAY" 2>/dev/null; then
+        GOT=$(fw_printenv bootdelay 2>/dev/null | sed 's/^bootdelay=//')
+        if [ "$GOT" = "$BOOTDELAY" ]; then
+            log "  bootdelay set to $BOOTDELAY (Hit any key to stop autoboot)"
+        else
+            log "  WARNING: bootdelay read back as '$GOT', expected '$BOOTDELAY'."
+        fi
+    else
+        log "  WARNING: could not set bootdelay — no U-Boot recovery window."
     fi
 fi
 
@@ -397,7 +436,7 @@ cat <<EOF
  A ready-to-paste conditional bootcmd is in the release README. To
  build it on the box instead:
 
-   fw_setenv bootcmd 'usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs '"'"'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'"'"'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs '"'"'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'"'"'; booti 0x2000000 - 0x5000000; fi'
+   fw_setenv bootcmd 'usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs '"'"'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'"'"'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs '"'"'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'"'"'; booti 0x2000000 - 0x5000000; fi'
 
    saveenv
 
@@ -405,6 +444,14 @@ cat <<EOF
  store literal backslashes, corrupt the kernel command line and
  reset the CPU. fw_setenv needs a BARE VALUE — never pass it the
  output of fw_printenv, or you will store "bootcmd=bootcmd=...".
+
+ Also give yourself a U-Boot recovery window:
+
+   fw_setenv bootdelay 3
+
+ That pauses the boot for 3 seconds with "Hit any key to stop autoboot",
+ so a box whose rootfs will not boot can still be reached at the U-Boot
+ prompt with nothing but a serial adapter. Set it to 0 to boot faster.
 
  Remove the USB stick and power cycle to confirm standalone boot.
 ============================================================

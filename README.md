@@ -15,13 +15,14 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 
 ## Status
 
-**v0.2-image** — a stick image you can `dd` and boot. Works on the development
+**v0.3-image** — a stick image you can `dd` and boot. Works on the development
 box. Not yet validated on other hardware.
 
 | | |
 |---|---|
-| Boots unattended from eMMC | ✅ power cycle only, ~2.3 s to login |
+| Boots unattended from eMMC | ✅ power cycle only, ~7 s to a systemd login |
 | Boots unattended from the stick | ✅ 1 boot / 1 booti / 0 prompts |
+| systemd | ✅ running as PID 1 — 0 failed units, `apt` works |
 | 4 cores | ✅ |
 | Ethernet 100 Mbps | ✅ internal RMII PHY |
 | HDMI | negotiated 1080p60 over EDID, DRM initialises — **picture never confirmed on a screen** |
@@ -34,8 +35,8 @@ box. Not yet validated on other hardware.
 | Clock after boot | ✅ chrony, with a persisted last-known-good fallback |
 | Automated eMMC install | ✅ runs end-to-end, verifies every write from storage |
 | Bootcmd installed automatically | ✅ the installer discovers the U-Boot env and sets it |
+| U-Boot recovery window | ✅ `bootdelay=3` — a "hit any key" prompt on every boot |
 | Root filesystem size | ✅ 15 GB on the eMMC, not the 744 MB it started as |
-| systemd | ❌ rescue init only |
 
 ### Quick start
 
@@ -67,7 +68,7 @@ afterwards. **Remove the stick and power cycle** to confirm.
 If your stick is larger than 1 GB and you want the extra space in the live
 system, run `scripts/grow-stick.sh` against it first.
 
-### Known gaps in v0.2
+### Known gaps in v0.3
 
 These are real and will bite you:
 
@@ -118,6 +119,7 @@ On power cycle, with nothing connected:
 
 ```
 BL2 → BL31 → U-Boot
+  "Hit any key to stop autoboot:  3  2  1  0"     ← 3 s to reach the U-Boot prompt
   bootcmd (saved in the U-Boot environment, set by the installer)
     usb start 0
     if fatload usb 0:1 0x2000000 Image; then
@@ -126,13 +128,37 @@ BL2 → BL31 → U-Boot
         mmc dev 1; mmc rescan
         ext4load mmc 1:1 0x2000000 Image
         ext4load mmc 1:1 0x5000000 sc2_s905x4_ah212_linux.dtb
-        setenv bootargs 'root=/dev/mmcblk0p2 ... init=/root/rescue-init.sh'
+        setenv bootargs 'root=/dev/mmcblk0p2 ... init=/lib/systemd/systemd'
         booti 0x2000000 - 0x5000000
-        → Linux 5.4.210, root on eMMC, login prompt on ttyS0 and HDMI
+        → Linux 5.4.210, root on eMMC, systemd as PID 1
 ```
 
 The stick is a **recovery key**, not a dependency: plug it in and the box
-boots the stick, unplug it and the box boots the eMMC. No menu, no countdown.
+boots the stick, unplug it and the box boots the eMMC. No menu, no countdown
+apart from the three-second U-Boot window.
+
+### If something goes wrong
+
+There are three ways back in, in increasing order of effort:
+
+1. **Plug the stick in.** It boots a complete Linux system with SSH, whether
+   or not the eMMC works. This is why the stick is a recovery key.
+2. **Interrupt the boot at the U-Boot prompt.** `bootdelay` is set to 3, so
+   there is a three-second window with "Hit any key to stop autoboot". With
+   nothing but a serial adapter you can then boot a different `init=` — the
+   rootfs carries both `systemd` and a minimal `rescue-init.sh`:
+
+   ```
+   setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 init=/root/rescue-init.sh'
+   ext4load mmc 1:1 0x2000000 Image
+   ext4load mmc 1:1 0x5000000 sc2_s905x4_ah212_linux.dtb
+   booti 0x2000000 - 0x5000000
+   ```
+
+   To change the delay, `fw_setenv bootdelay 0` (faster boot, no window) or
+   any other value in seconds. The installer sets it to 3.
+3. **Unlocking the bootloader** — ADNL and fastboot. See
+   [`docs/recovery.md`](docs/recovery.md).
 
 ---
 
@@ -147,10 +173,12 @@ docs/
   lessons.md                      engineering lessons from this project
 scripts/
   install-to-emmc.sh              provision eMMC from a running box
-  rescue-init.sh                  fast init used instead of systemd
+  rescue-init.sh                  minimal init — the fallback if systemd fails
   find-env.sh                     locate the U-Boot environment (read-only)
   prepare-stick.sh                make a stick a self-contained live system
   grow-stick.sh                   extend a stick's rootfs into leftover space
+  build-stick-image.sh            build the published .img.gz from a rootfs tree
+  write-stick-image.sh            write it to a stick and verify it byte-for-byte
   stick/                          the aml_autoscript uImage and its source
   uart/                           serial console tooling
 kernel/
@@ -173,7 +201,7 @@ Download it from the Releases page and check it against `kernel/SHA256SUMS`.
 | P1 | networking, clock, SSH after boot — **done** |
 | P2 | automated installer: stick → box → standalone — **done** |
 | P3 | recovery `bootcmd`: stick present means "re-provision me" — **done** |
-| P4 | systemd — a real OS rather than a rescue shell |
+| P4 | systemd — a real OS rather than a rescue shell — **done** |
 | P5 | confirm HDMI and audio on real hardware; WiFi driver |
 | P6 | packaging that assumes nothing about *this* box — **mostly done** |
 | P7 | optional boot menu via `sysboot`/extlinux — deferred |
