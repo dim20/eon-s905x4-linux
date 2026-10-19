@@ -183,7 +183,7 @@ From the 2026-10-19 audit. All of these are now fixed in
 `scripts/install-to-emmc.sh`, which has since been run end-to-end on real
 hardware:
 
-1. ~~`fleet-install.sh` **dd's into a mounted filesystem**~~ — fixed. The
+1. ~~`install-to-emmc.sh` **dd's into a mounted filesystem**~~ — fixed. The
    rootfs is copied with the target **unmounted**, and the filesystem is grown
    with `resize2fs` afterwards.
 2. ~~`install-to-emmc.sh` has literal `EOF` and `chmod` lines baked into the

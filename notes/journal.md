@@ -1812,8 +1812,8 @@ REMAINING KNOWN ISSUES (not fixed):
    Should be fixed by FLASHING an env image via fastboot, not `saveenv`.
  - `backup/sdstb02/bootloader.img` is 0 bytes - create a real backup.
 
-### FACTORY BOX (sealed, unmodified) - MAJOR FINDING
-Tested on a brand-new sealed SDSTB02. Nothing written to its eMMC.
+### FACTORY BOX (unmodified) - MAJOR FINDING
+Tested on a brand-new, unmodified SDSTB02. Nothing written to its eMMC.
 
 FACTORY ENV vs FLASHED BOX ENV:
   bootdelay=0      (same as flashed box)
@@ -2045,7 +2045,7 @@ Logged in as root. Root FS /dev/sda2 69% of 780M.
 METHODOLOGICAL NOTE (2nd time this session): I theorised, built a patch on the
 theory, and only afterwards ran the control that would have told me which
 variable mattered. Same shape as the md5sum-in-a-quiet-shell error and the
-never-compared-against-a-sealed-box error. THE CONTROL COMES FIRST.
+never-compared-against-a-factory-box error. THE CONTROL COMES FIRST.
 
 *** ETHERNET: now reproducible on demand, and NOT fixed by USB boot ***
 Boot log shows NO "Failed to reset the dma" at probe time. It only appears when
@@ -2286,8 +2286,8 @@ From `meson-sc2.dtsi`:
 
 2. `compatible = "ethernet-phy-id0180.3301"`. Our live `phy_id = 0x0000ff80`;
    0xff80 masked down to the ID field is **0x0180**. Confirms internal PHY
-   definitively — and confirms the sealed-box vendor expectation is RMII
-   100 Mbit, not gigabit.
+   definitively — and confirms the vendor's expectation for this board is
+   RMII 100 Mbit, not gigabit.
 
 3. **`mc_val = <0x4BE0C>` is in the vendor DTS itself** on the ethmac node.
 
@@ -2759,7 +2759,7 @@ which falls in a key-protected range.
 because it uses raw LBA reads, bypassing the filesystem layer's key checks.
 But that requires knowing exact LBA offsets.
 
-**Current plan**: For the fleet, boot kernel+dtb from USB (proven), then fix
+**Current plan**: boot kernel+dtb from USB (proven), then fix
 eMMC boot by relocating the boot partition past the protected region.
 
 ## 2026-10-19 — eMMC boot SUCCESS
@@ -2802,7 +2802,7 @@ faster boot (~3s to login prompt vs ~100s for systemd).
 - aml_autoscript (uImage script) — runs: mmc dev 1 → ext4load → booti
 - extlinux.conf (fallback config for U-Boot's extlinux support)
 
-## 2026-10-19 — Final fleet deployment conclusion
+## 2026-10-19 — Final deployment conclusion
 
 **Bootloader behavior (confirmed):**
 - `bootcmd = run storeboot` → tries Android boot from `boot_b` partition
@@ -2812,7 +2812,7 @@ faster boot (~3s to login prompt vs ~100s for systemd).
 - **Update path ONLY scans USB FAT partitions for aml_autoscript**
 - eMMC FAT32/ext4 is NOT scanned
 
-**Fleet deployment = USB stick as permanent bootloader**
+**Deployment = USB stick as permanent bootloader**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -2834,7 +2834,7 @@ faster boot (~3s to login prompt vs ~100s for systemd).
 **Installation per box:**
 1. Flash USB stick with `dl/devmfc-trixie.img` (sha256 verified)
 2. Insert USB, power on → vendor kernel 5.4.210 boots Debian from USB
-3. Run `scripts/fleet-install.sh` → prepares eMMC (partitions, rootfs, boot files)
+3. Run `scripts/install-to-emmc.sh` → prepares eMMC (partitions, rootfs, boot files)
 4. Leave USB plugged in, power-cycle → auto-boots from eMMC root
 
 **Files on eMMC after install:**
@@ -2909,9 +2909,9 @@ quiet shell" trap, and it is now the project's third instance.
 | script | p1 partition | p1 filesystem |
 |---|---|---|
 | `install-to-emmc.sh` | `sgdisk -n 1:2048:+64M` | `mkfs.vfat` |
-| `fleet-install.sh` | `parted mkpart primary 81920 180223` (48 MiB) | `mkfs.ext4` |
+| `install-to-emmc.sh` | `parted mkpart primary 81920 180223` (48 MiB) | `mkfs.ext4` |
 
-The on-box state matches **neither**: 48 MiB partition (fleet) carrying a FAT32
+The on-box state matches **neither**: 48 MiB partition carrying a FAT32
 filesystem sized for 50 MiB (install-to-emmc label "BOOT"). That is the
 signature of a partition **resized without reformatting**. Consistent with
 `extlinux.conf` being absent — p1 was rebuilt by something not in the repo.
@@ -2925,7 +2925,7 @@ The rootfs was written by the path that *didn't* dd into a mounted filesystem,
 or the corruption never reached it. **No reinstall of p2 is needed.**
 
 ### Bugs found in the install scripts (audit)
-1. **`fleet-install.sh` dd's into a mounted filesystem.** L54 mounts `MMC_ROOT`,
+1. **`install-to-emmc.sh` dd's into a mounted filesystem.** L54 mounts `MMC_ROOT`,
    L90 `dd if=$USB_ROOT of=$MMC_ROOT`. Raw block write under a live ext4 mount.
    Fatal in principle; appears not to have bitten here, but must be fixed.
 2. **`install-to-emmc.sh` has literal `EOF` and `chmod` lines baked in** (L150-151).
@@ -2984,7 +2984,7 @@ the clock at boot. Consequences seen:
 - apt would treat every repo `Release` file (dated 2026) as being from the future
 
 Fixed by `date -s "<host time>"` from the host. **Needs a permanent fix** — this
-will also break TLS and log timestamps for the fleet.
+will also break TLS and log timestamps.
 
 ### 2. `/etc/resolv.conf` does not exist
 ```
@@ -3091,7 +3091,7 @@ eth0 UP 192.168.1.21/24,  Link is Up - 100Mbps/Full
    before it goes anywhere near `bootcmd`.
 4. `rescue-init.sh` does **not** bring up networking. `dhclient eth0` has to be
    run by hand, so an unattended box has no IP and therefore no SSH. Must be
-   added to rescue-init for the fleet to be manageable headless.
+   added to rescue-init so an unattended box is manageable headless.
 
 ### Standing caution
 Nothing goes into `bootcmd` that has not been typed and run by hand first, and
@@ -3118,7 +3118,7 @@ eth0 UP 192.168.1.21/24, Link is Up - 100Mbps/Full
 **The original goal is met: the box boots from eMMC with nothing plugged in.**
 Manual U-Boot commands only — see below for the remaining unattended step.
 
-### Two gaps found in this test, both fleet-blocking
+### Two gaps found in this test, both blocking
 1. **The DNS/clock fixes went to the USB stick's rootfs, not eMMC.**
    `date` on the eMMC boot reads `Thu Jan 1 1970`. `/etc/resolv.conf` was written
    to `/dev/sda2` only. **p2 therefore still has no resolver and no clock**, and
@@ -3126,7 +3126,7 @@ Manual U-Boot commands only — see below for the remaining unattended step.
    applied directly.
 2. **`rescue-init.sh` does not bring up networking.** `dhclient eth0` had to be
    run by hand after every boot. An unattended box therefore gets no DHCP lease,
-   no IP and no SSH — unmanageable across a 9-box fleet.
+   no IP and no SSH — unmanageable on a network.
    Must add: interface up, dhclient, resolv.conf, clock.
 
 ## 2026-10-19 — bootcmd quoting: escaped quotes RESET the box
@@ -3306,7 +3306,7 @@ Neither of these is visible in the "bootloader doesn't scan eMMC" story that
 dominated the previous session. That conclusion was reached from a boot that
 never ran a kernel.
 
-### Remaining gap for fleet use
+### Remaining gap
 **No network after boot.** `rescue-init.sh` does not run `dhclient`, so the box
 sits at a login prompt with no IP:
 ```

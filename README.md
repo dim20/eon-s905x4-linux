@@ -16,7 +16,7 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 ## Status
 
 **v0.2-image** — a stick image you can `dd` and boot. Works on the development
-box. Not yet validated across a fleet.
+box. Not yet validated on other hardware.
 
 | | |
 |---|---|
@@ -79,8 +79,8 @@ These are real and will bite you:
    a real box.
 3. **The default root password is `tvbox`.** Change it, or do not put the box
    on an untrusted network.
-4. **No fleet validation.** Everything below was proven on one development
-   box. The eight other boxes are sealed and untouched.
+4. **Only one box has been tested.** Everything below was proven on one
+   development box. It has not been tested on any other hardware.
 5. **The first boot may need the vendor's own update path.** If your box does
    not find `aml_autoscript` on the stick by itself, see
    [`docs/recovery.md`](docs/recovery.md) — you will need a UART console once.
@@ -177,7 +177,7 @@ Download it from the Releases page and check it against `kernel/SHA256SUMS`.
 | P5 | confirm HDMI and audio on real hardware; WiFi driver |
 | P6 | packaging that assumes nothing about *this* box — **mostly done** |
 | P7 | optional boot menu via `sysboot`/extlinux — deferred |
-| P8 | fleet rollout |
+| P8 | rollout to other hardware, once validated |
 
 ---
 
