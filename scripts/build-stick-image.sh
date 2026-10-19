@@ -96,6 +96,46 @@ mdir -i "$WORK/p1.img" :: | sed 's/^/  /'
 log "building p2 (${P2_SIZE_MB}MB ext4 from $ROOTFS_TREE)"
 truncate -s "${P2_SIZE_MB}M" "$WORK/p2.img"
 
+# A rootfs copied as an unprivileged user ends up owned by that user, and
+# `cp -a` cannot preserve ownership when it is not root. The result boots
+# fine and then fails in ways that look like nothing to do with ownership:
+# sshd refuses to start because /run/sshd is not root-owned, and the whole
+# filesystem is writable by the wrong uid. Fix the ownership before the
+# image is built, rather than discovering it later.
+#
+# If the tree is ALREADY root-owned, chown will fail for a non-root user
+# even though there is nothing to fix — so check first, and only chown
+# when there is actually something to change.
+# NB: `find` exits non-zero when it cannot descend into a mode-0700
+# directory, which under `set -e` would kill the script. Force the exit
+# status to zero and handle the output instead.
+NOT_ROOT=$(find "$ROOTFS_TREE" ! -uid 0 2>/dev/null | head -1 || true)
+# find as a non-root user cannot descend into mode-0700 directories, so it may
+# report nothing even when files inside are not root-owned. Check the
+# top-level entries too, which is enough to catch the common case.
+if [ -z "$NOT_ROOT" ]; then
+    for d in "$ROOTFS_TREE" "$ROOTFS_TREE/root" "$ROOTFS_TREE/etc" "$ROOTFS_TREE/run" "$ROOTFS_TREE/var"; do
+        [ -e "$d" ] || continue
+        if [ "$(stat -c%u "$d" 2>/dev/null)" != "0" ]; then
+            NOT_ROOT="$d"
+            break
+        fi
+    done
+fi
+if [ -n "$NOT_ROOT" ]; then
+    if [ "$(id -u)" -ne 0 ]; then
+        die "the rootfs tree contains files not owned by root (e.g. $NOT_ROOT).
+  They came from an unprivileged copy. Fix them before building:
+      sudo chown -R 0:0 $ROOTFS_TREE
+  or run this script as root."
+    fi
+    log "  fixing ownership (some files are not root-owned)"
+    chown -R 0:0 "$ROOTFS_TREE" || die "chown failed"
+    log "  ownership fixed"
+else
+    log "  ownership already root:root"
+fi
+
 # mke2fs -d populates the filesystem from the directory at creation time.
 # No mount and no loop device, which is what makes this buildable on a
 # machine where the loop module cannot be loaded.
