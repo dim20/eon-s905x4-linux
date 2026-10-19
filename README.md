@@ -28,23 +28,22 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 | Bluetooth | present |
 | DVB tuner | ❌ not populated on this variant |
 | WiFi | ❌ RTL8812CS, no open driver (you supply a closed one) |
-| Network after boot | ❌ **not yet automatic** — see below |
+| Network after boot | ✅ DHCP, DNS, SSH — verified from a cold power cycle |
 | systemd | ❌ rescue init only |
 
 ### Known gaps in v0.1
 
 These are real and will bite you:
 
-1. **No network after boot.** `rescue-init.sh` does not run `dhclient`, so the
-   box comes up with no IP address and no SSH. You get a login prompt on HDMI
-   and serial, nothing else. Work in progress — this is the next thing being
-   fixed.
-2. **Clock reads 1970** and there is no `/etc/resolv.conf`, so `apt` cannot
-   work until both are fixed. See [`docs/install-image-requirements.md`](docs/install-image-requirements.md).
-3. **Booting the saved `bootcmd` currently needs a UART console** once, to run
-   `setenv` + `saveenv`. Automating that is in progress.
-4. **No automated installer is published yet.** The manual procedure is in
-   [`docs/install-image-requirements.md`](docs/install-image-requirements.md).
+1. **Booting the saved `bootcmd` needs a UART console once**, to run `setenv` +
+   `saveenv`. Automating that is the next task.
+2. **No automated installer.** `scripts/install-to-emmc.sh` exists and verifies
+   everything it writes, but **has not been run end-to-end** — provision it by
+   hand first, following [`docs/install-image-requirements.md`](docs/install-image-requirements.md).
+3. **The clock has no fallback.** `chronyd -q` sets the time once at boot and
+   exits. Boot with no network and the clock stays at 1970, which breaks `apt`
+   until someone fixes it by hand. A persisted last-known-good time is the fix,
+   and is not written yet.
 
 If you need a working box today, follow that document. If you want to help
 finish it, see the roadmap below.
@@ -121,7 +120,7 @@ Download it from the Releases page and check it against `kernel/SHA256SUMS`.
 | | Phase |
 |---|---|
 | P0 | boot chain, unattended eMMC boot — **done** |
-| P1 | networking, clock, SSH after boot |
+| P1 | networking, clock, SSH after boot — **done** |
 | P2 | automated installer: stick → box → standalone |
 | P3 | recovery `bootcmd`: stick present means "re-provision me" |
 | P4 | systemd — a real OS rather than a rescue shell |

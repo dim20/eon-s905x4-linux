@@ -241,3 +241,82 @@ A ~34 MB USB read into a high address trips an xHCI bug in this U-Boot.
   Verify after every change.
 - **Wrong DTB variant** gives a `Synchronous Abort` with no output.
 - See [`build-the-kernel.md`](build-the-kernel.md) for the full procedure.
+
+---
+
+## `dhclient` runs but no address appears
+
+### Cause: passing `-t`
+
+ISC dhclient 4.4.3 has **no `-t` flag** — that belongs to `udhcpc`. It exits
+with a usage error and no lease:
+
+```
+Unknown command: -t
+Usage: dhclient [-4|-6] [-SNTPRI1dvrxi] ...
+```
+
+This looks exactly like "DHCP is broken". Drop the flag and bound the wait by
+polling for an address instead:
+
+```sh
+dhclient -q eth0
+for i in $(seq 20); do
+    ip -4 addr show eth0 | grep -q 'inet ' && break
+    sleep 1
+done
+```
+
+---
+
+## `apt-get install <pkg>` says **"no installation candidate"**
+
+for a package that plainly exists in the repo. Do not reach for
+`--allow-unauthenticated` yet — **check the clock first.**
+
+### Cause: the clock is at 1970
+
+Every repository signature is dated 2026, so to a box that thinks it is 1970
+every signature is in the future and **all repositories are rejected**:
+
+```
+W: OpenPGP signature verification failed: http://deb.debian.org/debian trixie/InRelease:
+   error message is: Verifying signature: Not live until 2026-10-18T17:16:39Z
+E: The repository 'http://deb.debian.org/debian trixie/InRelease' is not signed.
+```
+
+That produces "no installation candidate" — a message that reads like a
+repository or architecture problem and is neither.
+
+### Fix
+
+```sh
+date                                  # is it 1970?
+date -s "$(date -u)"                  # from a host with the right time
+apt-get update                        # now succeeds
+```
+
+### And do not let it happen on a fresh box
+
+This creates a chicken-and-egg: wrong clock -> `apt` rejects all repos -> cannot
+install `chrony` -> clock stays wrong. Ship `chrony` **pre-installed**;
+`chronyd -q` needs only a network and DNS, not `apt`.
+
+---
+
+## Box boots but never gets an IP
+
+`rescue-init.sh` brings networking up in the background. If it does not, check in
+order:
+
+```sh
+cat /sys/class/net/eth0/carrier       # 1 = link up
+ip -br addr show eth0                 # address?
+cat /var/log/dhclient.log             # lease detail
+cat /etc/resolv.conf                  # exists?
+```
+
+The DHCP client on this image does not write `resolv.conf` (`resolvconf` is not
+installed), so a static one is shipped rather than relying on the lease.
+
+---

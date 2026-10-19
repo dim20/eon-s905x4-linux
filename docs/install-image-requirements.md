@@ -3,23 +3,64 @@
 Changes that must be baked into the image shipped to each box. Each one is a
 fault found on the test box on 2026-10-19 — none of them are theoretical.
 
-## 1. Clock (BLOCKING)
+## 1. Clock (BLOCKING — and it blocks apt in a way that is easy to misdiagnose)
 
 Box boots with `Thu Jan 1 1970`. Causes:
 - `hwclock` binary absent from the rootfs
 - meson-vrtc RTC reads back invalid, so nothing sets the time
 
-Consequences: PAM refuses logins (`account root has password changed in future`),
-apt treats every repo `Release` as future-dated, TLS breaks, log timestamps are
-meaningless.
+### The failure mode looks nothing like a clock problem
 
-Options — pick one:
-- **NTP** in `rescue-init.sh` (needs DNS working, so do #2 first), or
-- ship `hwclock` and have the boot path write the clock back, or
-- accept 1970 and have the *installer* set the date over SSH at provision time
+With the clock at epoch, `apt-get update` reports:
 
-NTP is cleanest but has a chicken-and-egg with DNS. Doing both in `rescue-init.sh`
-in the right order resolves it.
+```
+W: OpenPGP signature verification failed: http://deb.debian.org/debian trixie/InRelease:
+   Sub-process /usr/bin/sqv returned an error code (1),
+   error message is: Verifying signature: Not live until 2026-10-18T17:16:39Z
+E: The repository '...' is not signed.
+```
+
+`Not live until 2026-10-…` — the repository signature is dated 2026 and the box
+thinks it is 1970, so every signature is in the future and **all repositories are
+rejected as unsigned**. `apt-get install` then says a perfectly available package
+"has no installation candidate".
+
+**If you see "no installation candidate" for a package you know exists, check
+`date` before anything else.**
+
+Other consequences:
+- PAM refuses logins: `account root has password changed in future`
+- TLS breaks
+- log timestamps are meaningless
+
+### The chicken-and-egg, and how to break it
+
+The obvious fix is NTP — but NTP normally arrives via `apt`, and `apt` is exactly
+what the broken clock prevents:
+
+```
+clock wrong  →  apt refuses all repos  →  cannot install chrony  →  clock stays wrong
+```
+
+Break it **either** way:
+
+- **(a) Ship `chrony` pre-installed in the image.** Preferred. `chronyd` does not
+  need `apt`, only a network and DNS, and `rescue-init.sh` runs it as soon as
+  `eth0` has an address.
+- **(b) Have the installer set the clock over the network first** (from the host
+  that is provisioning, or from any host with `ntpdate`/`chronyc`). Then `apt`
+  works and `chrony` can be installed normally.
+
+Do **not** reach for `Acquire::AllowInsecureRepositories` or
+`--allow-unauthenticated`. That converts a fixable clock problem into a permanent
+supply-chain hole.
+
+### Once the clock is right
+
+```sh
+date -s "$(date -u)"          # from a host with the correct time
+apt-get update                 # now succeeds
+```
 
 ## 2. `/etc/resolv.conf` (BLOCKING)
 
