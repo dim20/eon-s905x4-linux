@@ -15,11 +15,13 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 
 ## Status
 
-**v0.1-testbox** — works on the development box. Not yet validated across a fleet.
+**v0.2-image** — a stick image you can `dd` and boot. Works on the development
+box. Not yet validated across a fleet.
 
 | | |
 |---|---|
 | Boots unattended from eMMC | ✅ power cycle only, ~2.3 s to login |
+| Boots unattended from the stick | ✅ 1 boot / 1 booti / 0 prompts |
 | 4 cores | ✅ |
 | Ethernet 100 Mbps | ✅ internal RMII PHY |
 | HDMI | negotiated 1080p60 over EDID, DRM initialises — **picture never confirmed on a screen** |
@@ -32,24 +34,56 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 | Clock after boot | ✅ chrony, with a persisted last-known-good fallback |
 | Automated eMMC install | ✅ runs end-to-end, verifies every write from storage |
 | Bootcmd installed automatically | ✅ the installer discovers the U-Boot env and sets it |
+| Root filesystem size | ✅ 15 GB on the eMMC, not the 744 MB it started as |
 | systemd | ❌ rescue init only |
 
-### Known gaps in v0.1
+### Quick start
+
+Download `eon-s905x4-linux-stick.img.gz` from the Releases page and write it
+to a USB stick of 1 GB or more:
+
+```sh
+gunzip -c eon-s905x4-linux-stick.img.gz | sudo dd of=/dev/sdX bs=4M status=progress
+sync
+```
+
+Plug it into the box and power cycle. The box boots the stick, brings up
+networking and SSH, and gives you a login (`root` / `tvbox`):
+
+```sh
+ssh root@<the address the box says on the serial console>
+```
+
+From there, provision the eMMC:
+
+```sh
+/root/install-to-emmc.sh
+```
+
+It verifies every artefact before and after writing, grows the filesystem to
+fill the eMMC, and sets the boot command so the box boots on its own
+afterwards. **Remove the stick and power cycle** to confirm.
+
+If your stick is larger than 1 GB and you want the extra space in the live
+system, run `scripts/grow-stick.sh` against it first.
+
+### Known gaps in v0.2
 
 These are real and will bite you:
 
 1. **HDMI and audio have never been seen working.** DRM negotiates a mode and
    the ASoC card registers, but nobody has looked at a screen or heard a
    speaker. Treat both as untested.
-2. **The image is built for a 1 GB stick.** p1 is 64 MB and p2 is 800 MB, so
-   the published image is 880 MB and fits the smallest stick anyone is likely
-   to have. If you use a bigger one, `scripts/grow-stick.sh` extends p2 into
-   the leftover space.
-3. **The clock fallback is only unit-tested.** The chrony success path is
+2. **The clock fallback is only unit-tested.** The chrony success path is
    proven on hardware; the "no network at boot" path has not been exercised on
    a real box.
+3. **The default root password is `tvbox`.** Change it, or do not put the box
+   on an untrusted network.
 4. **No fleet validation.** Everything below was proven on one development
    box. The eight other boxes are sealed and untouched.
+5. **The first boot may need the vendor's own update path.** If your box does
+   not find `aml_autoscript` on the stick by itself, see
+   [`docs/recovery.md`](docs/recovery.md) — you will need a UART console once.
 
 If you want to help finish it, see the roadmap below.
 
@@ -137,12 +171,12 @@ Download it from the Releases page and check it against `kernel/SHA256SUMS`.
 |---|---|
 | P0 | boot chain, unattended eMMC boot — **done** |
 | P1 | networking, clock, SSH after boot — **done** |
-| P2 | automated installer: stick → box → standalone |
-| P3 | recovery `bootcmd`: stick present means "re-provision me" |
+| P2 | automated installer: stick → box → standalone — **done** |
+| P3 | recovery `bootcmd`: stick present means "re-provision me" — **done** |
 | P4 | systemd — a real OS rather than a rescue shell |
 | P5 | confirm HDMI and audio on real hardware; WiFi driver |
-| P6 | packaging that assumes nothing about *this* box |
-| P7 | optional boot menu via `sysboot`/extlinux |
+| P6 | packaging that assumes nothing about *this* box — **mostly done** |
+| P7 | optional boot menu via `sysboot`/extlinux — deferred |
 | P8 | fleet rollout |
 
 ---

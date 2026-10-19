@@ -3,7 +3,12 @@
 Changes that must be baked into the image shipped to each box. Each one is a
 fault found on the test box on 2026-10-19 — none of them are theoretical.
 
-## 1. Clock (BLOCKING — and it blocks apt in a way that is easy to misdiagnose)
+> **Status.** All of these were originally requirements on the image. They are
+> now baked into the published image, and the reasoning is kept below because
+> it is the part worth having: every one of these faults is invisible from the
+> boot log and shows up as something else entirely.
+
+## 1. Clock (BLOCKING — and it blocks apt in a way that is easy to misdiagnose) — DONE
 
 Box boots with `Thu Jan 1 1970`. Causes:
 - `hwclock` binary absent from the rootfs
@@ -62,7 +67,7 @@ date -s "$(date -u)"          # from a host with the correct time
 apt-get update                 # now succeeds
 ```
 
-## 2. `/etc/resolv.conf` (BLOCKING)
+## 2. `/etc/resolv.conf` (BLOCKING) — DONE
 
 The file **does not exist** on a fresh boot. `dhclient` obtains the lease but
 never writes a resolver — `resolvconf` is not installed.
@@ -73,7 +78,7 @@ Result: no DNS. `apt-get update` hangs indefinitely with an empty
 Fix: ship `/etc/resolv.conf` with `nameserver 8.8.8.8` / `nameserver 1.1.1.1`.
 Do not rely on DHCP to create it.
 
-## 3. Force IPv4 for apt
+## 3. Force IPv4 for apt — DONE
 
 DNS returns **AAAA only** for `deb.debian.org`, and the box has no IPv6 route,
 so apt stalls trying to fetch over v6.
@@ -105,7 +110,40 @@ after the link goes up, so a fixed one-second sleep is not enough either.
 This runs **in the background** so it never blocks the serial console — the
 console is the recovery path and must stay usable.
 
-## 5. Root filesystem sanity
+## 5. The image must be loggable-into — DONE, but it nearly was not
+
+Two faults, found only by actually trying to log in. Both are invisible from
+the boot log, and both are the kind of thing a "the file is there" check
+misses.
+
+**`/etc/shadow` must exist and be readable.** The image was originally built
+by copying a mounted rootfs as an unprivileged user, and `cp -a` cannot
+preserve ownership without root — so mode-0640 files were **silently
+skipped**. The result had a `root` entry in `/etc/passwd` and no shadow file
+at all, and the box booted perfectly and refused every login.
+
+**`/run` must be a tmpfs, and the whole tree must be root-owned.** The image
+ships a `/run` tree owned by the uid that built it, and `sshd` refuses to
+start when `/run/sshd` is not root-owned:
+
+```
+/run/sshd must be owned by root and not group or world-writable.
+```
+
+Worse, the init script ran `sshd 2>/dev/null`, discarding the only clue, and
+then printed `network ready: <ip> (ssh)` — **a success message that was a
+lie**. The box announced SSH and then refused every connection.
+
+So:
+
+- `rescue-init.sh` mounts `/run` as a tmpfs, `chown`s `/run/sshd`, and
+  reports sshd's first error line if it still refuses to start
+- the image build fixes ownership across the whole tree, and refuses to
+  build from a tree that is not root-owned
+- the build script verifies its output by extracting the filesystem back out
+  and diffing it against the source, which is what catches a skipped file
+
+## 6. Root filesystem sanity
 
 Verified good on the test box and should stay that way:
 - `e2fsck -fn` clean on both p1 and p2
@@ -117,7 +155,7 @@ the box has no FAT tooling at all (`mkfs.vfat` absent, no `busybox`), and a FAT
 filesystem whose geometry disagrees with the partition caused a silent,
 undetectable kernel corruption — see notes.
 
-## 6. Post-write verification (the omission that cost a day)
+## 7. Post-write verification (the omission that cost a day)
 
 No install script has ever hashed what it wrote. That is why a corrupt kernel sat
 on the box through an entire session of "eMMC boot doesn't work".
@@ -139,7 +177,7 @@ Image  5adbc4cc53cc3633cf44a07f0d61cc2937af41ed3c717846f253526b46c52dc9  (345518
 DTB    176ddf27b9e392175dbbbd057449d023c7ddd8bda68210d54c71fccf585d2043  (78956 B)
 ```
 
-## 7. Installer bugs — status
+## 8. Installer bugs — status
 
 From the 2026-10-19 audit. All of these are now fixed in
 `scripts/install-to-emmc.sh`, which has since been run end-to-end on real
@@ -201,7 +239,7 @@ hardware:
     time is now persisted and restored when chrony cannot sync.
 
 
-## 8. The published stick image
+## 9. The published stick image
 
 | | size | filesystem | contents |
 |---|---|---|---|
