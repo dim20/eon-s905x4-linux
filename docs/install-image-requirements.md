@@ -246,3 +246,24 @@ quotes in comments: an unbalanced quote drops the parser into its `>`
 continuation prompt and the script never runs. The source is kept as
 `scripts/stick/aml_autoscript.src` for documentation; the built uImage is
 made from a comment-stripped copy.
+
+### Building the image
+
+`scripts/build-stick-image.sh <rootfs-tree> [output.img.gz]` builds the
+published image from a prepared rootfs tree:
+
+```sh
+./scripts/build-stick-image.sh ./rootfs-tree dist/eon-s905x4-linux-stick.img.gz
+```
+
+It needs `mke2fs`, `mkfs.vfat`, `mtools`, `debugfs`, `sfdisk` and `gzip` —
+and **no loop device**, because `mke2fs -d` populates the ext4 filesystem
+from a directory at creation time and `mtools` writes FAT images directly.
+That matters, because the loop module often cannot be loaded in containers
+and VMs, and the build should not depend on it.
+
+The script verifies its own output: it extracts the ext4 filesystem back
+out with `debugfs` and `diff -r`s it against the source tree, and refuses
+to finish if they differ. That check is not decoration — an unprivileged
+copy silently skips mode-0640 files, and a rootfs missing `/etc/shadow`
+produces an image that boots perfectly and cannot be logged into.
