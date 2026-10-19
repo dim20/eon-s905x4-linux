@@ -29,24 +29,29 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 | DVB tuner | ❌ not populated on this variant |
 | WiFi | ❌ RTL8812CS, no open driver (you supply a closed one) |
 | Network after boot | ✅ DHCP, DNS, SSH — verified from a cold power cycle |
+| Clock after boot | ✅ chrony, with a persisted last-known-good fallback |
+| Automated eMMC install | ✅ runs end-to-end, verifies every write from storage |
+| Bootcmd installed automatically | ✅ the installer discovers the U-Boot env and sets it |
 | systemd | ❌ rescue init only |
 
 ### Known gaps in v0.1
 
 These are real and will bite you:
 
-1. **Booting the saved `bootcmd` needs a UART console once**, to run `setenv` +
-   `saveenv`. Automating that is the next task.
-2. **No automated installer.** `scripts/install-to-emmc.sh` exists and verifies
-   everything it writes, but **has not been run end-to-end** — provision it by
-   hand first, following [`docs/install-image-requirements.md`](docs/install-image-requirements.md).
-3. **The clock has no fallback.** `chronyd -q` sets the time once at boot and
-   exits. Boot with no network and the clock stays at 1970, which breaks `apt`
-   until someone fixes it by hand. A persisted last-known-good time is the fix,
-   and is not written yet.
+1. **HDMI and audio have never been seen working.** DRM negotiates a mode and
+   the ASoC card registers, but nobody has looked at a screen or heard a
+   speaker. Treat both as untested.
+2. **The image is built for a 1 GB stick.** p1 is 64 MB and p2 is 800 MB, so
+   the published image is 880 MB and fits the smallest stick anyone is likely
+   to have. If you use a bigger one, `scripts/grow-stick.sh` extends p2 into
+   the leftover space.
+3. **The clock fallback is only unit-tested.** The chrony success path is
+   proven on hardware; the "no network at boot" path has not been exercised on
+   a real box.
+4. **No fleet validation.** Everything below was proven on one development
+   box. The eight other boxes are sealed and untouched.
 
-If you need a working box today, follow that document. If you want to help
-finish it, see the roadmap below.
+If you want to help finish it, see the roadmap below.
 
 ---
 
@@ -79,14 +84,21 @@ On power cycle, with nothing connected:
 
 ```
 BL2 → BL31 → U-Boot
-  bootcmd (saved in U-Boot environment)
-    mmc dev 1; mmc rescan
-    ext4load mmc 1:1 0x2000000 Image
-    ext4load mmc 1:1 0x5000000 sc2_s905x4_ah212_linux.dtb
-    setenv bootargs 'root=/dev/mmcblk0p2 ... init=/root/rescue-init.sh'
-    booti 0x2000000 - 0x5000000
-      → Linux 5.4.210, root on eMMC, login prompt on ttyS0 and HDMI
+  bootcmd (saved in the U-Boot environment, set by the installer)
+    usb start 0
+    if fatload usb 0:1 0x2000000 Image; then
+        → boot from the USB stick, root on /dev/sda2
+    else
+        mmc dev 1; mmc rescan
+        ext4load mmc 1:1 0x2000000 Image
+        ext4load mmc 1:1 0x5000000 sc2_s905x4_ah212_linux.dtb
+        setenv bootargs 'root=/dev/mmcblk0p2 ... init=/root/rescue-init.sh'
+        booti 0x2000000 - 0x5000000
+        → Linux 5.4.210, root on eMMC, login prompt on ttyS0 and HDMI
 ```
+
+The stick is a **recovery key**, not a dependency: plug it in and the box
+boots the stick, unplug it and the box boots the eMMC. No menu, no countdown.
 
 ---
 
@@ -102,6 +114,10 @@ docs/
 scripts/
   install-to-emmc.sh              provision eMMC from a running box
   rescue-init.sh                  fast init used instead of systemd
+  find-env.sh                     locate the U-Boot environment (read-only)
+  prepare-stick.sh                make a stick a self-contained live system
+  grow-stick.sh                   extend a stick's rootfs into leftover space
+  stick/                          the aml_autoscript uImage and its source
   uart/                           serial console tooling
 kernel/
   sc2_s905x4_ah212_linux.dtb

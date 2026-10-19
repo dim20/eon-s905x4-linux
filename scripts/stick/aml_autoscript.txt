@@ -1,0 +1,5 @@
+usb start 0
+fatload usb 0:1 0x2000000 Image
+fatload usb 0:1 0x5000000 sc2_s905x4_ah212_linux.dtb
+setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'
+booti 0x2000000 - 0x5000000

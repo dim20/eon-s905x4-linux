@@ -33,23 +33,37 @@ mount -t tmpfs    tmpfs    /tmp      2>/dev/null
 mount -t devpts   devpts   /dev/pts  2>/dev/null
 
 # ---------------------------------------------------------------- hostname
-HN=$(cat /proc/sys/kernel/hostname 2>/dev/null || echo eon-sc2)
+HN=$(cat /proc/sys/kernel/hostname 2>/dev/null)
+case "$HN" in
+    ""|"(none)") HN=eon-sc2 ;;
+esac
+echo "$HN" > /proc/sys/kernel/hostname 2>/dev/null
 echo "$HN" > /etc/hostname 2>/dev/null
 
 # ---------------------------------------------------------------- network
 # Runs in the background. Every step is best-effort: a box with no cable should
 # still reach a login prompt, not hang here.
 net_setup() {
-    # Up to ~20s for carrier. 100 Mbps link, no switch needed locally.
+    mkdir -p /var/lib
+    # ORDER MATTERS: bring the link UP *first*, then wait for carrier.
+    #
+    # Waiting for carrier before `ip link set up` can never succeed: on a DOWN
+    # interface, reading /sys/class/net/eth0/carrier returns EINVAL ("Invalid
+    # argument"), not "0", so the loop runs to timeout and the interface is
+    # still down afterwards.
+    ip link set eth0 up 2>/dev/null
+
+    # After the link goes up the PHY still needs ~1.5s to report ready
+    # (observed: `ip link` at 146.12s, "Link is Up" at 147.61s). A fixed sleep
+    # of 1s is not enough and dhclient then starts on an interface that cannot
+    # yet transmit - it gets no lease and gives up silently.
+    # So: poll for carrier, up to ~20s.
     i=0
     while [ $i -lt 20 ]; do
         [ "$(cat /sys/class/net/eth0/carrier 2>/dev/null)" = "1" ] && break
         sleep 1
         i=$((i+1))
     done
-
-    ip link set eth0 up 2>/dev/null
-    sleep 1
 
     # DHCP. ISC dhclient 4.4.3 has NO -t/--timeout flag (that is a udhcpc
     # option) - passing it makes dhclient exit with a usage error and no lease.
@@ -69,17 +83,45 @@ net_setup() {
         printf 'nameserver 8.8.8.8\nnameserver 1.1.1.1\n' > /etc/resolv.conf
     fi
 
-    # Clock. There is no hwclock and the RTC reads back invalid, so the box
-    # boots at 1970 unless something sets it. Chrony is preferred; if it is not
-    # installed we leave the clock alone rather than inventing a time, but say so
-    # loudly - apt and TLS will both misbehave at epoch 0.
-    if command -v chronyd >/dev/null 2>&1; then
-        chronyd -q >/var/log/chrony.log 2>&1 || true
-        sleep 2
-    fi
-    Y=$(date +%Y)
-    if [ "$Y" -lt 2020 ] 2>/dev/null; then
-        echo "WARNING: clock is not set (year $Y). apt and TLS will fail." >&2
+    # Clock. There is no hwclock and the RTC reads back invalid, so the box boots
+    # at 1970 unless something sets it. This matters more than it looks: apt
+    # rejects every repo signature as "not live yet" when the clock is at epoch
+    # 0, which shows up as a misleading "no installation candidate" rather than
+    # as a time problem.
+    #
+    # Order: try chrony (needs the network, which we now have). If that fails,
+    # fall back to the last time we successfully knew - good enough for TLS and
+    # far better than 1970. We never invent a time: a wrong-but-plausible clock
+    # is harder to debug than an obviously-wrong one.
+    set_clock() {
+        if command -v chronyd >/dev/null 2>&1; then
+            # -q sets the time once and exits; it does not daemonise.
+            chronyd -q >/var/log/chrony.log 2>&1 || true
+            sleep 2
+        fi
+        if [ "$(date +%Y)" -ge 2020 ] 2>/dev/null; then
+            # Good clock - remember it for a future offline boot.
+            date +%s >/var/lib/lastgoodtime 2>/dev/null
+            return 0
+        fi
+        if [ -s /var/lib/lastgoodtime ]; then
+            T=$(cat /var/lib/lastgoodtime 2>/dev/null)
+            # Validate before use: a truncated or corrupted file would otherwise
+            # be handed to `date -s` and could set a nonsense clock, which is far
+            # harder to diagnose than having no clock at all.
+            case "$T" in
+                ''|*[!0-9]*) T="" ;;
+            esac
+            if [ -n "$T" ] && date -s "@$T" >/dev/null 2>&1; then
+                echo "clock: chrony unavailable, restored last known good time" >&2
+                return 0
+            fi
+        fi
+        return 1
+    }
+
+    if ! set_clock; then
+        echo "WARNING: clock is not set (year $(date +%Y)). apt and TLS will fail." >&2
         echo "         install chrony, or run: date -s \"\$(date -u)\"" >&2
     fi
 

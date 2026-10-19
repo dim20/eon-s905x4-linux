@@ -21,7 +21,9 @@
 
 set -euo pipefail
 
-MMC=/dev/mmcblk0
+# MMC is overridable ONLY so the whole script can be rehearsed against loop
+# devices instead of the real eMMC. Leave it alone for real installs.
+MMC=${MMC:-/dev/mmcblk0}
 USB_BOOT=${USB_BOOT:-/dev/sda1}
 USB_ROOT=${USB_ROOT:-/dev/sda2}
 
@@ -46,6 +48,32 @@ for d in "$MMC" "$USB_BOOT" "$USB_ROOT"; do
     [ -b "$d" ] || die "$d not found"
 done
 
+# SAFETY: refuse to run while booted FROM the eMMC being written.
+# If / is on ${MMC}p2 then this script would unmount, partition and mkfs the
+# filesystem it is itself running from — the box would die mid-install with a
+# half-written target and no way back. Boot from the USB stick instead, so the
+# eMMC is only ever a target.
+#
+# Compare by MAJOR:MINOR from /proc/self/mountinfo, NOT by device name.
+# findmnt reports "/" as "/dev/root" here (a symlink to itself), so a
+# name-based check compares "/dev/root" against "/dev/mmcblk0p2", does not
+# match, and sails straight through the guard while wiping the live system.
+# The mountinfo major:minor is authoritative: 179:2 is eMMC p2, 8:2 is the
+# stick. Verified on this box.
+ROOT_MM=$(awk '$5=="/" {print $3; exit}' /proc/self/mountinfo)
+TGT_MM=$(stat -c '%t:%T' "$MMC")
+case "$TGT_MM" in *:*) TGT_MM_DEC=$(printf '%d' "0x${TGT_MM%%:*}")'.'$(printf '%d' "0x${TGT_MM##*:}") ;; *) TGT_MM_DEC="" ;; esac
+log "root filesystem major:minor = $ROOT_MM ; $MMC = ${TGT_MM_DEC:-unknown}"
+if [ -n "$TGT_MM_DEC" ] && [ "$ROOT_MM" = "$TGT_MM_DEC" ]; then
+    die "refusing to run: the running root filesystem IS $MMC (major:minor
+  $ROOT_MM), which this script is about to repartition and format.
+
+  This installer must be run from the USB stick, so that the eMMC is only
+  ever a target. Power off, ensure the stick is plugged in, and power on
+  again — the saved bootcmd will boot the stick automatically."
+fi
+log "running root ($ROOT_MM) is not the target ($MMC ${TGT_MM_DEC:-?}) — safe to proceed"
+
 if [ -r /proc/device-tree/amlogic-dt-id ]; then
     if ! grep -q "sc2_s905x4_ah212" /proc/device-tree/amlogic-dt-id; then
         die "not an sc2_s905x4_ah212 board"
@@ -60,12 +88,37 @@ mkdir -p "$SRC"
 log "mounting USB boot partition"
 mount "$USB_BOOT" "$SRC" || die "cannot mount $USB_BOOT"
 
-for f in "$KERNEL_NAME" "$DTB_NAME"; do
-    [ -f "$SRC/$f" ] || die "missing $f on USB boot partition"
+# The stick keeps the boot artefacts in a d/ subdirectory, which is also where
+# the saved bootcmd loads them from on the USB branch. Do NOT reorganise the
+# stick to suit this script — the d/ layout is load-bearing for a boot path
+# that is verified working, and moving files risks breaking it. So look there
+# first, then fall back to the boot-partition root for sticks laid out flat.
+BOOTDIR=""
+FOUND=no
+for cand in d ""; do
+    if [ -f "$SRC/$cand/$KERNEL_NAME" ] && [ -f "$SRC/$cand/$DTB_NAME" ]; then
+        BOOTDIR=$cand
+        FOUND=yes
+        break
+    fi
 done
+# NB: a flat layout legitimately gives BOOTDIR="", so the "not found" case must
+# be tracked separately rather than tested with -z on the directory.
+if [ "$FOUND" != yes ]; then
+    die "missing $KERNEL_NAME / $DTB_NAME on USB boot partition.
+  Looked in: $SRC/d/ and $SRC/."
+fi
+[ -n "$BOOTDIR" ] && log "  boot artefacts in: $SRC/${BOOTDIR:-.}"
+KERNEL_SRC="$SRC/${BOOTDIR:+$BOOTDIR/}$KERNEL_NAME"
+DTB_SRC="$SRC/${BOOTDIR:+$BOOTDIR/}$DTB_NAME"
+# Prefix used in the bootcmd's USB branch. Defined HERE, at the top level, so
+# it is in scope for both the "we set it for you" and the "you do it by hand"
+# paths below.
+USB_PREFIX=""
+[ -n "$BOOTDIR" ] && USB_PREFIX="$BOOTDIR/"
 
 log "checking source hashes BEFORE writing anything"
-got=$(sha256sum "$SRC/$KERNEL_NAME" | cut -d' ' -f1)
+got=$(sha256sum "$KERNEL_SRC" | cut -d' ' -f1)
 if [ "${VERIFY_SKIP:-0}" != 1 ] && [ "$got" != "$EXPECT_IMAGE" ]; then
     die "kernel hash mismatch on source
   expected $EXPECT_IMAGE
@@ -75,13 +128,74 @@ The source is corrupt. Refusing to write it to eMMC.
 fi
 log "  kernel OK $got"
 
-got=$(sha256sum "$SRC/$DTB_NAME" | cut -d' ' -f1)
+got=$(sha256sum "$DTB_SRC" | cut -d' ' -f1)
 if [ "${VERIFY_SKIP:-0}" != 1 ] && [ "$got" != "$EXPECT_DTB" ]; then
     die "DTB hash mismatch on source
   expected $EXPECT_DTB
   got      $got"
 fi
 log "  dtb   OK $got"
+
+# ---------------------------------------------------------------- env (A + B)
+# The U-Boot environment lives INSIDE p2 on this hardware (measured: 28 MiB into
+# p2 on this box). The dd below copies ~773 MiB from the start of p2, so it
+# DESTROYS the environment — including any bootcmd that makes the box bootable.
+#
+# That is why this section must run BEFORE anything is written, and why a
+# reinstall wipes an existing bootcmd rather than preserving it by accident.
+#
+# A = discover the env and write a fresh conditional bootcmd afterwards.
+# B = back the env block up before the dd, so it can be restored (or handed to
+#     the user) if anything goes wrong.
+#
+# The offset is a property of the board's U-Boot build and dtb, so it is
+# DISCOVERED, never hardcoded. If discovery does not positively verify, we do
+# NOT touch the environment at all — writing to an uncertain offset risks an
+# unbootable box, which is worse than asking the user for two U-Boot commands.
+
+ENVBAK=/root/env-backup
+ENV_CONF=""
+ENV_DEV=""
+ENV_OFF=""
+ENV_ERASE=0     # 1 if the partition work below destroys the env
+
+log "locating U-Boot environment (read-only)"
+if [ -x /root/find-env.sh ]; then
+    if ENVFOUND=$(/root/find-env.sh "$MMC" 2>/dev/null); then
+        ENV_DEV=${ENVFOUND%% *}
+        ENV_OFF=${ENVFOUND##* }
+        ENV_CONF=$ENVBAK/fw_env.config
+        log "  found env at $ENV_DEV $ENV_OFF"
+    else
+        log "  WARNING: could not locate the U-Boot environment."
+        log "  It will NOT be modified. You will need to set bootcmd from U-Boot."
+    fi
+else
+    log "  WARNING: /root/find-env.sh not found — cannot locate the environment."
+fi
+
+# B: back the env block up BEFORE any write. Costs 512 KiB and is the only way
+# back if a later step goes wrong.
+if [ -n "$ENV_OFF" ]; then
+    mkdir -p "$ENVBAK"
+    OFF_DEC=$(( ENV_OFF ))
+    log "  backing up env block to $ENVBAK"
+    if dd if="$MMC" bs=512 skip=$(( OFF_DEC/512 )) count=1024 \
+          of="$ENVBAK/env-block.bin" 2>/dev/null && [ -s "$ENVBAK/env-block.bin" ]; then
+        sha256sum "$ENVBAK/env-block.bin" > "$ENVBAK/env-block.sha256"
+        fw_printenv 2>/dev/null > "$ENVBAK/env-before.txt" || true
+        cp /etc/fw_env.config "$ENVBAK/fw_env.config.orig" 2>/dev/null || true
+        # A working config for this box, so the restore instructions below are
+        # copy-pasteable.
+        printf '%s %s 0x10000 0x200\n' "$ENV_DEV" "$ENV_OFF" > "$ENV_CONF"
+        log "  backup OK ($(stat -c%s "$ENVBAK/env-block.bin") bytes)"
+        log "  NOTE: the dd below overwrites this region — the env WILL be replaced."
+        ENV_ERASE=1
+    else
+        log "  WARNING: env backup FAILED. Continuing without one."
+        ENV_ERASE=0
+    fi
+fi
 
 # ---------------------------------------------------------------- partition
 log "unmounting anything on $MMC"
@@ -111,6 +225,90 @@ log "copying rootfs from $USB_ROOT to $P2 (unmounted) — this takes a minute"
 dd if="$USB_ROOT" of="$P2" bs=4M conv=fsync status=progress
 sync
 
+# ---------------------------------------------------------------- grow to fill
+# The dd above copies the SOURCE partition's bytes (about 773 MiB from a stock
+# stick) and stops. The ext4 filesystem therefore stays that size even though P2
+# spans the whole 14.9 GB eMMC — the user would boot into a ~5%-full root
+# filesystem with the remaining ~13 GB sitting unallocated. That is not obvious
+# from df and looks like a hardware fault.
+#
+# grow the filesystem to fill the (already correctly sized) partition. Offline,
+# so the device must be unmounted.
+log "growing filesystem to fill $P2"
+e2fsck -fp "$P2" >/dev/null 2>&1 || true
+resize2fs "$P2" || die "resize2fs failed; rootfs is still small but usable — run 'resize2fs $P2' by hand after rebooting"
+sync
+
+# Report the result rather than trusting the exit code alone: a resize that
+# silently did nothing still exits 0 on some builds.
+# NB: the block size is 4096 here, NOT the 512-byte sector size — getting this
+# wrong reports a size 8x too small. Read it from the superblock rather than
+# assuming. (Also note "Block count:" splits into fields 2 and 3; the number is $3.)
+FS_MIB=$(dumpe2fs -h "$P2" 2>/dev/null | awk '
+    /^Block count:/ { bc=$3 }
+    /^Block size:/  { bs=$3 }
+    END { if (bc && bs) print int(bc*bs/1048576) }')
+PART_MIB=$(blockdev --getsize64 "$P2" 2>/dev/null | awk '{print int($1/1048576)}')
+log "  filesystem now ${FS_MIB} MiB (partition is ${PART_MIB} MiB)"
+if [ -n "$FS_MIB" ] && [ -n "$PART_MIB" ] && [ "$FS_MIB" -lt "$PART_MIB" ]; then
+    log "  WARNING: filesystem is still smaller than its partition."
+    log "  Run 'resize2fs $P2' after rebooting to reclaim the difference."
+fi
+
+# ---------------------------------------------------------------- restore env (B)
+# The dd above overwrote the region the environment lived in. Put a valid one
+# back, then set bootcmd (A). Until this runs the box has no usable bootcmd.
+if [ "$ENV_ERASE" = 1 ]; then
+    log "restoring U-Boot environment block"
+    OFF_DEC=$(( ENV_OFF ))
+    if dd if="$ENVBAK/env-block.bin" of="$MMC" bs=512 seek=$(( OFF_DEC/512 )) \
+          count=1024 conv=fsync 2>/dev/null; then
+        sync
+        # Verify from the device, not from page cache (rule 3).
+        dd if="$MMC" bs=512 skip=$(( OFF_DEC/512 )) count=1024 2>/dev/null \
+          | cmp -s - "$ENVBAK/env-block.bin" \
+          && log "  env block restored and verified" \
+          || log "  WARNING: env block restore did NOT verify"
+    else
+        log "  ERROR: could not write the env block back."
+        log "  The box will not boot until bootcmd is set from U-Boot."
+    fi
+fi
+
+# ---------------------------------------------------------------- set bootcmd (A)
+# fw_setenv takes a BARE VALUE. Passing fw_printenv output stores
+# "bootcmd=bootcmd=..." — a doubled prefix that corrupts the variable. This
+# happened during testing and briefly bricked the boot path.
+if [ -n "$ENV_CONF" ] && [ "$ENV_ERASE" = 1 ] && [ -f "$ENV_CONF" ]; then
+    log "setting conditional bootcmd via fw_setenv"
+    cp "$ENV_CONF" /etc/fw_env.config
+
+    # The USB branch must load from the SAME directory the artefacts were
+    # actually found in. Hardcoding "d/" here while reading from an
+    # auto-detected path is a latent bug: on a flat stick the installer would
+    # read the kernel successfully, then write a bootcmd pointing at a
+    # non-existent d/Image — and the USB branch would fail SILENTLY, falling
+    # through to the eMMC branch. The stick would then look like it had no
+    # effect at all.
+    BOOTCMD=$(cat <<EOF
+usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'; booti 0x2000000 - 0x5000000; fi
+EOF
+)
+
+    if fw_setenv bootcmd "$BOOTCMD" 2>/dev/null; then
+        # Do not trust the exit code — verify by reading back and comparing.
+        GOT=$(fw_printenv bootcmd 2>/dev/null | sed 's/^bootcmd=//')
+        if [ "$GOT" = "$BOOTCMD" ]; then
+            log "  bootcmd set and verified"
+        else
+            log "  ERROR: bootcmd read back DIFFERENTLY — env may be corrupt."
+            log "  Restore with: fw_setenv bootcmd \"\$(cat $ENVBAK/env-before.txt | sed 's/^bootcmd=//')\""
+        fi
+    else
+        log "  ERROR: fw_setenv failed. The box will not boot unattended."
+    fi
+fi
+
 # ---------------------------------------------------------------- fstab
 # Written through a mount, after the dd, then unmounted again.
 log "writing fstab"
@@ -126,8 +324,8 @@ umount "$MNT"
 # ---------------------------------------------------------------- boot part
 log "populating $P1"
 mount "$P1" "$MNT"
-cp "$SRC/$KERNEL_NAME" "$MNT/$KERNEL_NAME"
-cp "$SRC/$DTB_NAME" "$MNT/$DTB_NAME"
+cp "$KERNEL_SRC" "$MNT/$KERNEL_NAME"
+cp "$DTB_SRC" "$MNT/$DTB_NAME"
 sync
 umount "$MNT"
 umount "$SRC"
@@ -166,33 +364,49 @@ cat <<EOF
 
    $P1  ext4  BOOT    $KERNEL_NAME, $DTB_NAME
    $P2  ext4  ROOTFS  Debian
+EOF
 
- NEXT STEP — install the bootcmd so the box boots unattended.
- This must be done from U-Boot, once, because fw_printenv is not
- usable on this board:
+if [ "$ENV_ERASE" = 1 ] && [ -n "$ENV_CONF" ] && [ -f "$ENV_CONF" ]; then
+cat <<EOF
 
-   mmc dev 1
-   ext4load mmc 1:1 0x2000000 $KERNEL_NAME
-   ext4load mmc 1:1 0x5000000 $DTB_NAME
-   booti 0x2000000 - 0x5000000
+ The bootcmd has been set for you (conditional: boots the USB stick
+ if present, otherwise the eMMC). Nothing else is required.
 
- ...boot to Linux, then power cycle and interrupt U-Boot, and set:
+ Remove the USB stick and power cycle to confirm standalone boot.
 
-   setenv bootcmd "mmc dev 1; mmc rescan; \\
-     ext4load mmc 1:1 0x2000000 $KERNEL_NAME; \\
-     ext4load mmc 1:1 0x5000000 $DTB_NAME; \\
-     setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw \\
-       console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 \\
-       no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused \\
-       TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'; \\
-     booti 0x2000000 - 0x5000000"
+ The previous environment was backed up to:
+   $ENVBAK/env-block.bin   (raw block, sha256 alongside)
+   $ENVBAK/env-before.txt  (human-readable, all variables)
+ To restore it later:
+   cp $ENV_CONF /etc/fw_env.config
+   dd if=$ENVBAK/env-block.bin of=$MMC bs=512 seek=$(( ${ENV_OFF} / 512 )) count=1024 conv=fsync
+============================================================
+EOF
+else
+cat <<EOF
+
+ NEXT STEP — set the bootcmd from U-Boot so the box boots unattended.
+ This installer could not locate the U-Boot environment, so it did not
+ touch it. Writing to an uncertain offset risks an unbootable box, so
+ this step is left to you deliberately.
+
+   ...power cycle, interrupt U-Boot, then:
+
+   setenv bootcmd "usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then <usb branch>; else <emmc branch>; fi"
+
+ A ready-to-paste conditional bootcmd is in the release README. To
+ build it on the box instead:
+
+   fw_setenv bootcmd 'usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs '"'"'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'"'"'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs '"'"'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'"'"'; booti 0x2000000 - 0x5000000; fi'
 
    saveenv
 
  NOTE the single quotes around bootargs. Escaped double quotes
  store literal backslashes, corrupt the kernel command line and
- reset the CPU.
+ reset the CPU. fw_setenv needs a BARE VALUE — never pass it the
+ output of fw_printenv, or you will store "bootcmd=bootcmd=...".
 
  Remove the USB stick and power cycle to confirm standalone boot.
 ============================================================
 EOF
+fi

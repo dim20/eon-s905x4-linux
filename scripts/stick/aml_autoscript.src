@@ -1,0 +1,32 @@
+# aml_autoscript.src — source for the USB stick's aml_autoscript uImage.
+#
+# Built with:
+#   mkimage -A arm64 -O linux -T script -C none -d aml_autoscript.src aml_autoscript
+#
+# WHY THIS EXISTS
+# The vendor's own aml_autoscript (from the factory image) sets a multi-boot
+# order — sd, usb, emmc, org — and then runs bootscript/cfgload/s905_autoscript/
+# boot.scr. Those scripts are written for a DIFFERENT kernel (the 6.18.55
+# mainline one) and a different device tree. On this box they select a mainline
+# DTB that describes 4 GB of RAM, which the 2 GB board does not have, and the
+# kernel dies before any console output at all.
+#
+# This script does the minimum that works: load OUR kernel and OUR device tree
+# from the stick and boot them, with root on the stick's own second partition.
+# It is self-contained — no box-config dependency, no boot order, no fallback
+# to a broken kernel.
+#
+# The boot artefacts live at the ROOT of the FAT boot partition (not in d/),
+# so the paths here are flat: "Image" and "sc2_s905x4_ah212_linux.dtb".
+#
+# NOTE the single quotes around bootargs. Escaped double quotes store literal
+# backslashes, which corrupts the kernel command line and resets the CPU.
+#
+# This file is MIT-licensed (see LICENSE in the repository root). The kernel
+# and DTB it loads are GPL-2.0 — see kernel/GPL-2.0-NOTICE.md.
+
+usb start 0
+fatload usb 0:1 0x2000000 Image
+fatload usb 0:1 0x5000000 sc2_s905x4_ah212_linux.dtb
+setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/root/rescue-init.sh'
+booti 0x2000000 - 0x5000000

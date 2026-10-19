@@ -320,3 +320,224 @@ The DHCP client on this image does not write `resolv.conf` (`resolvconf` is not
 installed), so a static one is shipped rather than relying on the lease.
 
 ---
+## The network never comes up, even though the cable is plugged in
+
+### Cause: the carrier check runs before the link is up
+
+`rescue-init.sh` originally waited for carrier *before* bringing the interface
+up:
+
+```sh
+# WRONG
+while [ "$(cat /sys/class/net/eth0/carrier)" != "1" ]; do sleep 1; done
+ip link set eth0 up
+```
+
+On a **down** interface, reading `carrier` does not return `0` — it returns
+`EINVAL`:
+
+```
+# cat /sys/class/net/eth0/carrier
+cat: /sys/class/net/eth0/carrier: Invalid argument
+```
+
+So the test could never succeed, the loop ran to its timeout, and the
+interface was still down when `dhclient` started. And even after
+`ip link set eth0 up`, the PHY needs about 1.5 s to report ready
+(`ip link` at 146.12 s, `Link is Up` at 147.61 s), so a fixed one-second sleep
+is not enough either.
+
+### Fix: bring the link up FIRST, then poll for carrier
+
+```sh
+ip link set eth0 up
+while [ "$(cat /sys/class/net/eth0/carrier 2>/dev/null)" != "1" ]; do sleep 1; done
+```
+
+This is a **race**, not a hard failure: the same buggy script sometimes worked,
+because the link happened to come up on its own during the 20-second wait.
+Do not treat a working boot as proof the code is right.
+
+---
+
+## `fw_setenv` says "Cannot initialize environment"
+
+### Cause: `/etc/fw_env.config` names the wrong device and the wrong offset
+
+The stock config on this board points at `/dev/mmcblk1` — which does not exist
+(only `mmcblk0` and its partitions do) — and at an offset that is not where
+the environment actually lives.
+
+### Fix: discover the environment, do not guess
+
+`scripts/find-env.sh` locates it read-only: scan for `bootcmd=`, round down to
+a 64 KiB boundary, then **functionally verify** by pointing a temporary
+`fw_env.config` at the candidate and requiring `fw_printenv` to return a
+plausible set of variables. If nothing verifies, it exits non-zero and the
+installer refuses to touch the environment.
+
+Two false positives to be aware of, both found the hard way:
+
+- **A byte-identical copy of the environment passes every content check.**
+  Because the installer `dd`s p2 wholesale, another partition can contain a
+  full copy, and `fw_printenv` parses it happily. A variable *count* proves
+  nothing, and neither does checking variable *names* — the copy has the same
+  names. Only *position* discriminates.
+- **A glob meant to match a partition can also match the whole device.**
+  A pattern of `*[0-9]*` matches `/dev/mmcblk0` on its trailing digit.
+
+The offset is a property of the board's U-Boot build, so it must be
+discovered per box, never hardcoded.
+
+---
+
+## `fw_setenv` succeeded but the bootcmd is now `bootcmd=bootcmd=...`
+
+### Cause: you passed `fw_printenv` output straight back into `fw_setenv`
+
+`fw_printenv` prints `bootcmd=<value>`. `fw_setenv` wants the **bare value**.
+Feeding one into the other stores the name twice, and the variable is broken.
+
+### Fix
+
+```sh
+V=$(fw_printenv bootcmd | sed 's/^bootcmd=//')
+fw_setenv bootcmd "$V"
+```
+
+Then **verify by reading back and comparing**, not by trusting the exit code:
+
+```sh
+fw_printenv bootcmd | sed 's/^bootcmd=//' | cmp - <(printf '%s' "$V")
+```
+
+Take a copy of the environment block before any write, so you can restore it:
+
+```sh
+dd if=/dev/mmcblk0 bs=512 skip=237568 count=1024 of=env-block.bin
+```
+
+---
+
+## The U-Boot prompt shows `>` instead of running your command
+
+### Cause: the line arrived truncated, leaving a quote unclosed
+
+The serial link at 1 Mbaud cannot reliably carry a long line in one write. A
+~900-character `bootcmd` was silently truncated, and U-Boot's parser sat in its
+continuation prompt.
+
+`Ctrl-C` does **not** escape it — you must send a lone `"` to close the open
+quote.
+
+### Fix: build long strings from short pieces
+
+U-Boot's hush expands `${var}` inside `setenv`, so you can assemble a long
+value from several short commands:
+
+```sh
+setenv p1 "usb start 0; if fatload usb 0:1 0x2000000 Image; then "
+setenv p2 "setenv bootargs 'root=/dev/sda2 ...'; booti 0x2000000 - 0x5000000; "
+setenv testcmd "${p1}${p2}"
+```
+
+Also: do **not** `printenv` a long value immediately before `saveenv`. Long
+output over this link gets dropped, and `saveenv` can land mid-stream and
+reset the board.
+
+---
+
+## A `dd`d filesystem is only as big as the source
+
+### Cause: `dd` with no `count=` copies the whole source partition
+
+```sh
+dd if="$USB_ROOT" of="$P2" bs=4M conv=fsync
+```
+
+The destination partition is 14.9 GB, but only the source partition's bytes
+are copied — about 773 MiB. The filesystem stays that size and the rest sits
+unallocated, which looks exactly like a hardware fault from `df`.
+
+### Fix: grow the filesystem after the copy
+
+```sh
+e2fsck -fp "$P2"
+resize2fs "$P2"
+```
+
+And report the result rather than trusting the exit code:
+
+```sh
+dumpe2fs -h "$P2" | awk '
+    /^Block count:/ { bc=$3 }
+    /^Block size:/  { bs=$3 }
+    END { if (bc && bs) print int(bc*bs/1048576) }'
+```
+
+Note the block size is **4096**, not the 512-byte sector size — assuming 512
+reports a size 8× too small. And `Block count:` splits into fields 2 and 3;
+the number is `$3`.
+
+---
+
+## A file exists, has the right name, and is still wrong
+
+### Cause: a copy that failed partway leaves a zero-length file
+
+Copying into a full filesystem can leave a 0-byte file that is indistinguishable
+from a good one until you hash it. This happened to the kernel `Image` during
+image preparation.
+
+### Fix: hash every artefact after every copy
+
+```sh
+sha256sum Image sc2_s905x4_ah212_linux.dtb
+```
+
+Compare against `kernel/SHA256SUMS`. Do not trust "the file is there".
+
+---
+
+## The U-Boot environment disappears after re-running the installer
+
+### Cause: the environment lives inside p2
+
+On this hardware the U-Boot environment is 28 MiB into p2, so the installer's
+`dd` of the rootfs **overwrites it** — including any `bootcmd` that makes the
+box bootable.
+
+### Fix: back the environment up before writing, and restore it after
+
+`scripts/install-to-emmc.sh` does this automatically: it discovers the
+environment, saves a 512 KiB copy, restores it after the `dd`, verifies the
+restore from the device, and only then sets the new `bootcmd`.
+
+If you do it by hand, the order matters:
+
+```sh
+dd if=/dev/mmcblk0 bs=512 skip=237568 count=1024 of=env-block.bin   # backup FIRST
+# ... do the partition/format/dd ...
+dd if=env-block.bin of=/dev/mmcblk0 bs=512 seek=237568 count=1024 conv=fsync
+```
+
+Note `seek` is in **sectors** when `bs=512` — the byte offset 121634816
+divided by 512, not the byte offset itself.
+
+---
+
+## The stick is ignored and the box boots the eMMC anyway
+
+### Cause: the bootcmd points at a path that does not exist on the stick
+
+The installer reads the kernel from whichever directory it finds it in, but
+the `bootcmd` it writes must load from **that same directory**. If the script
+reads from the boot-partition root and writes `d/Image`, the `fatload` fails
+**silently**, the `if` takes the else branch, and the box boots the eMMC as if
+the stick were not there at all.
+
+### Fix: derive the path in the bootcmd from the path you actually read
+
+The published image keeps the artefacts at the boot-partition root, and the
+installer derives the prefix from where it found them — so both the automatic
+and the manual instructions agree.
