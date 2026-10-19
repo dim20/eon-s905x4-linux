@@ -31,6 +31,11 @@ mount -t sysfs    sysfs    /sys      2>/dev/null
 mount -t devtmpfs devtmpfs /dev      2>/dev/null
 mount -t tmpfs    tmpfs    /tmp      2>/dev/null
 mount -t devpts   devpts   /dev/pts  2>/dev/null
+# /run must be a tmpfs of its own. The image ships a /run tree owned by the
+# uid that built it (1000), and sshd refuses to start when /run/sshd is not
+# owned by root: "/run/sshd must be owned by root and not group or
+# world-writable". Mounting tmpfs over it gives a clean, root-owned /run.
+mount -t tmpfs    tmpfs    /run      2>/dev/null
 
 # ---------------------------------------------------------------- hostname
 HN=$(cat /proc/sys/kernel/hostname 2>/dev/null)
@@ -127,10 +132,19 @@ net_setup() {
 
     # sshd, so an unattended box is reachable over the network.
     mkdir -p /run/sshd 2>/dev/null
+    # sshd refuses to start if the privilege-separation directory is not
+    # root-owned, and it says so only in its own error output, which is
+    # discarded below. So fix the ownership explicitly and say so if sshd
+    # still refuses — a silent "network ready ... (ssh)" that cannot be
+    # logged into is worse than a loud failure.
+    chown root:root /run/sshd 2>/dev/null
+    chmod 0755 /run/sshd 2>/dev/null
     if [ ! -f /etc/ssh/ssh_host_ed25519_key ]; then
         ssh-keygen -A >/dev/null 2>&1
     fi
-    /usr/sbin/sshd 2>/dev/null
+    if ! /usr/sbin/sshd 2>/tmp/sshd.err; then
+        echo "WARNING: sshd did not start: $(head -1 /tmp/sshd.err 2>/dev/null)" >&2
+    fi
 
     IP=$(ip -4 -o addr show eth0 2>/dev/null | awk '{print $4}' | cut -d/ -f1)
     [ -n "$IP" ] && echo "network ready: $IP (ssh)"
