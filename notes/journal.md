@@ -3320,3 +3320,198 @@ all backgrounded so the serial console is never blocked.
 Also still outstanding: clock reads 1970, `/etc/resolv.conf` absent, and
 `Acquire::ForceIPv4` unset **on the eMMC rootfs** — those fixes were applied to
 the USB stick's copy only. See `INSTALL-IMAGE-REQUIREMENTS.md`.
+
+---
+
+## 2026-10-19 (later) — the installer runs end-to-end, and the stick is rebuilt
+
+### Conditional `bootcmd` saved and proven in both directions
+
+The saved `bootcmd` is a conditional: the stick if present, the eMMC if not.
+
+```
+usb start 0; if fatload usb 0:1 0x2000000 Image; then <usb branch>;
+else <emmc branch>; fi
+```
+
+Two things had to be established before it was safe to `saveenv`:
+
+- **`fatload` returns non-zero on failure**, so `if fatload ...; then` is a
+  valid test. Verified directly with a non-existent filename.
+- **`usb start 0` returns instantly with no stick** — no stall. This was the
+  one thing that could have made `saveenv` dangerous.
+
+Both branches then verified from a cold boot, unattended, zero prompts:
+stick in → `root=/dev/sda2`; stick out → `root=/dev/mmcblk0p2`.
+
+#### The serial link truncates long lines
+
+Sending the ~900-character conditional as one line **failed** — U-Boot dropped
+into a `>` continuation prompt because the line arrived truncated. `Ctrl-C`
+does not escape it; a lone `"` does.
+
+Fix: build the value from short pieces with hush expansion, which works:
+
+```sh
+setenv x ABC
+setenv y ${x}DEF      # y=ABCDEF
+```
+
+Also: do **not** `printenv` a long value immediately before `saveenv`. Long
+output over this link is dropped, and `saveenv` landed mid-stream and reset
+the box.
+
+### `fw_setenv` works — the config was wrong twice over
+
+The stock `/etc/fw_env.config` named `/dev/mmcblk1` (which does not exist on
+this board) and the wrong offset. With both corrected, `fw_printenv` returns
+all **132** variables with a valid CRC.
+
+The offset is a property of this board's U-Boot build, so it must be
+**discovered**, not hardcoded. `scripts/find-env.sh` does that read-only.
+
+Two false positives found while testing it, both silent and in opposite
+directions:
+
+- A **byte-identical copy** of the environment passes every content check —
+  because the installer `dd`s p2 wholesale, another partition holds a full
+  copy, and `fw_printenv` parses it happily. A variable *count* proves
+  nothing, and neither does checking variable *names*: the copy has the same
+  names. Only **position** discriminates.
+- A glob meant to match a partition (`*[0-9]*`) also matched the whole device
+  (`/dev/mmcblk0`, trailing digit) and rejected the one correct candidate.
+
+A guard against this class of bug needs a **negative** test, not just a
+positive one.
+
+#### `fw_setenv` takes a bare value
+
+`fw_printenv` prints `bootcmd=<value>`; feeding that back into `fw_setenv`
+stores `bootcmd=bootcmd=...`. This happened during testing and briefly broke
+the working bootcmd. Always strip the name, and verify by reading back and
+comparing.
+
+### The environment lives INSIDE p2 — so the installer's own `dd` destroys it
+
+Located at 28 MiB into p2 (sector 237568). This is why the installer has to
+back the environment up *before* the rootfs copy and restore it *after*.
+
+### The installer, run end-to-end
+
+| step | result |
+|---|---|
+| partition + format | p1 ext4 at sector 81920 (past the eMMC key range 73760–74785), p2 to 100 % |
+| copy rootfs | 773 MiB, target unmounted |
+| **`resize2fs`** | **773 MiB → 14,851 MiB** |
+| restore env | verified from the device |
+| `fw_setenv bootcmd` | verified by full-string readback |
+| boot artefacts | hashes verified from a read-only remount |
+
+The result: a 15 GB rootfs with 13 GB free, on hardware that previously had
+744 MB with 23 MB free.
+
+#### `resize2fs` — the fix that was not optional
+
+`dd` with no `count=` copies only the source partition's bytes. Without the
+resize the rootfs stayed at 773 MiB inside a 14.9 GB partition — about 5 % of
+the eMMC usable, which looks exactly like a hardware fault from `df`.
+
+#### Two arithmetic bugs of my own, both caught by checking against a device
+
+- `Block count:` splits into fields 2 and 3; the number is `$3`. Parsing `$2`
+  yields the string `count:` and evaluates to 0.
+- The block size is **4096**, not the 512-byte sector size. Assuming 512
+  reports every size 8× too small.
+
+Both would have shipped a broken installer. Both were caught by comparing the
+number against `df` rather than trusting it.
+
+### `rescue-init.sh` had two ordering bugs
+
+**The network could never come up.** The carrier poll ran *before*
+`ip link set eth0 up`, and reading `carrier` on a down interface returns
+`EINVAL`, not `0` — so the test could never succeed. Confirmed empirically:
+up → `1`, down → `Invalid argument`. And after bringing the link up, a fixed
+one-second sleep is not enough: the PHY needs ~1.5 s (`ip link` at 146.12 s,
+`Link is Up` at 147.61 s).
+
+This was a **race**, not a hard failure. The same code sometimes worked,
+which is exactly why it went unnoticed: the eMMC boot won the race, the stick
+boot lost it.
+
+**The clock had no fallback.** Now the last-known-good time is persisted and
+restored when chrony cannot sync — with the saved value validated as
+all-digits first, because handing garbage to `date -s` would set a nonsense
+clock, which is harder to debug than no clock at all.
+
+### A safety guard that was silently broken
+
+The installer refuses to run while booted from the eMMC it is about to
+repartition. The first version compared device **names**:
+
+```sh
+ROOTDEV=$(findmnt -n -o SOURCE /)     # -> "/dev/root"
+case "$ROOTDEV" in "${MMC}"p*) die ;; esac
+```
+
+`findmnt` reports the root as `/dev/root` on this box, not `/dev/sda2`, so the
+comparison never matched and the guard never fired. It now compares
+**major:minor** from `/proc/self/mountinfo` (stick `8:2` vs eMMC `179:2`).
+
+A guard that reads plausibly and never fires is worse than no guard, because
+it looks like protection.
+
+### The stick rebuilt: flat layout, 880 MB
+
+| | size | filesystem |
+|---|---|---|
+| p1 | 64 MB | FAT32 (LBA), LBA 32768 |
+| p2 | 800 MB | ext4, LBA 163840 |
+
+Deliberately small so it fits a 1 GB stick. The stick is the *install source*,
+so p2's size sets the install time (773 MB → 39 s, 7 GB → 109 s), and the
+eMMC takes all the space anyway. This is the same relationship an ISO has to
+its target disk.
+
+`scripts/grow-stick.sh` extends p2 into leftover space for anyone with a
+bigger stick — tested, 800 MB → 1968 MB with contents intact.
+
+The boot artefacts moved from `d/` to the **root** of the FAT boot partition.
+Three things had to be updated together, and one of them was a latent bug:
+
+- the `aml_autoscript` uImage (rebuilt with flat paths)
+- the installer's `fw_setenv` path
+- **the installer read the kernel from an auto-detected directory but wrote a
+  bootcmd with `d/` hardcoded** — so on a flat stick the USB branch would fail
+  *silently*, fall through to the eMMC branch, and the stick would appear to
+  do nothing at all.
+
+#### The U-Boot payload must not contain quotes in comments
+
+An unbalanced quote puts hush into its `>` continuation prompt and the script
+never runs. The vendor's own autoscript avoids quotes in comments for the
+same reason. The source is kept for documentation; the uImage is built from a
+comment-stripped copy.
+
+#### The stick's `aml_autoscript` must boot the stick
+
+It is the first-boot entry vector — the vendor bootloader scans the USB stick
+and runs it. It must set `root=/dev/sda2`. One copy of it in the tree had
+`root=/dev/mmcblk0p2`, which would boot the Android you are trying to
+replace.
+
+#### The host has no loop devices
+
+`losetup` fails (the module cannot be loaded). FAT images must be built with
+`mtools`; ext4 images must be built on the box, which does have loop
+devices.
+
+An early attempt to populate p1 with `cp` into a mountpoint silently wrote
+into an empty directory, because the loop mount had failed and the `&&` chain
+still echoed "mounted". **Verify the mount actually happened.**
+
+#### A failed copy leaves a file with the right name and the wrong size
+
+Copying the p1 backup produced a 0-byte `Image`. A file with the right name
+is indistinguishable from a good one until you hash it. Hash every artefact
+after every copy.
