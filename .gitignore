@@ -1,0 +1,9 @@
+# The kernel Image is a release asset, not a repo blob.
+# Download it from the Releases page and verify with kernel/SHA256SUMS.
+kernel/Image
+
+# local scratch
+*.log
+*.img
+*.xz
+*.tmp

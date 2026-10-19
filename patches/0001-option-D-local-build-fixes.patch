@@ -1,0 +1,36 @@
+diff --git a/Makefile b/Makefile
+index 89411929a..b4ad8a8a2 100644
+--- a/Makefile
++++ b/Makefile
+@@ -496,6 +496,15 @@ endif
+ KBUILD_CFLAGS	+= -Wno-stringop-overread -Wno-tautological-compare -Wno-tautological-pointer-compare
+ KBUILD_CFLAGS	+= -Wno-error=array-compare -Wno-error=address -Wno-dangling-pointer
+ KBUILD_CFLAGS	+= -Wno-enum-int-mismatch
++# LOCAL PATCH (sdstb02 option D): gcc 13.3 vs the 5.4 tree. Amlogic's
++# workarounds above cover array-compare/address/dangling-pointer but not
++# -Wunused-function, which gcc 13 reports on static helpers this tree leaves
++# unreferenced (khadas-mcu.c mcu_i2c_read_regs, vout2_serve.c
++# get_vout2_init_mode). -Werror here is unconditional apart from ifndef
++# CONFIG_KASAN, so there is no config lever; opt out wholesale rather than
++# chase warnings one at a time. Revert when building with the compiler this
++# tree was written for.
++KBUILD_CFLAGS	+= -Wno-error
+ 
+ ifdef CONFIG_AMLOGIC_MODIFY
+ ifndef CONFIG_DYNAMIC_DEBUG
+diff --git a/arch/arm64/boot/dts/amlogic/Makefile b/arch/arm64/boot/dts/amlogic/Makefile
+index 1b8af15a0..b1f21eea2 100644
+--- a/arch/arm64/boot/dts/amlogic/Makefile
++++ b/arch/arm64/boot/dts/amlogic/Makefile
+@@ -13,6 +13,11 @@ dtb-y += s5_s928x_ugoos_am8_8g.dtb
+ dtb-y += s5_s928x_ugoos_sk1_8g.dtb
+ dtb-y += s5_s928x_x96_x10_4g.dtb
+ dtb-y += s5_s928x_x96_x10_8g.dtb
++# LOCAL PATCH (sdstb02 option D): our board. The .dts sources are present in
++# this tree (amlogic-dt-id = "sc2_s905x4_ah212") but CoreELEC's fork trimmed
++# dtb-y to the boards it ships, so ours was never built. 2 GB memory node.
++dtb-y += sc2_s905x4_ah212.dtb
++dtb-y += sc2_s905x4_ah212_linux.dtb
+ dtb-y += sc2_s905x4_2g.dtb
+ dtb-y += sc2_s905x4_2g_1gbit.dtb
+ dtb-y += sc2_s905x4_4g.dtb

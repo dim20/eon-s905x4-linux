@@ -1,0 +1,215 @@
+# Building the kernel
+
+Required for two reasons: to rebuild the `Image` this project ships, and to
+satisfy GPL-2.0 §3, which requires that anyone given the binary is also given
+the Corresponding Source.
+
+If you only want to *use* the box, download the release `Image` and verify it
+against `kernel/SHA256SUMS`. You do not need to build anything.
+
+---
+
+## Provenance
+
+| | |
+|---|---|
+| Upstream | https://github.com/CoreELEC/linux-amlogic |
+| Branch | `amlogic-5.4.210` |
+| Commit | `a3aaaa5b0` |
+| Licence | GPL-2.0 |
+| Config | `arch/arm64/configs/meson64_a64_P_defconfig` |
+| Local patches | [`../patches/`](../patches/) — two files, both explained below |
+| Produced | `Image` (34,551,816 bytes) and `sc2_s905x4_ah212_linux.dtb` (78,956 bytes) |
+
+Everything below is what was actually done. Where something was a workaround
+rather than a clean fix, it says so.
+
+---
+
+## Why this kernel
+
+Every mainstream arm64 kernel distribution we checked ships a **PE/ZBOOT
+wrapped** kernel — Armbian/ophub, and Debian's own `linux-image-*-arm64`. That
+wrapper breaks `booti` on this board's U-Boot, and `bootefi` is broken in the
+same U-Boot too.
+
+The vendor tree is the practical answer: it is a real Linux kernel for this
+SoC, and its defconfig sets `# CONFIG_EFI is not set`, so the output is a plain
+arm64 image that `booti` can load.
+
+---
+
+## Build
+
+### 1. Toolchain
+
+Bootlin **`aarch64--glibc--stable-2024.05-1`** (gcc 13.3.0, Buildroot 2021.11).
+
+Chosen deliberately as an old stable gcc: the 5.4 tree is from 2022 and newer
+compilers trip it. Note gcc 13.3 against a 5.4 tree is an unusual pairing and
+was the main build risk; see patch 1.
+
+No cross toolchain was available on the host and `sudo` required a password, so
+a self-contained tarball was the no-friction route.
+
+Host-side tools (kconfig, `fixdep`, etc.) build fine with a much newer host
+compiler.
+
+### 2. Configure
+
+```sh
+git clone --depth 1 -b amlogic-5.4.210 https://github.com/CoreELEC/linux-amlogic
+cd linux-amlogic
+git rev-parse HEAD     # confirm a3aaaa5b0
+
+export CROSS_COMPILE=/path/to/bootlin/bin/aarch64-
+make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE O=out meson64_a64_P_defconfig
+```
+
+### 3. Config delta — [`0002-option-D.config.delta`](../patches/0002-option-D.config.delta)
+
+```sh
+./scripts/config --file out/.config --enable AMLOGIC_MEDIA_VIDEOCAPTURE
+```
+
+**Why:** `drivers/amlogic/media/video_sink/video_hw.c` uses
+`vd_layer[].capture_use_cnt`, `.capture_frame_req` and `CAPTURE_STATE_*`
+unconditionally, but all three are inside
+`#ifdef CONFIG_AMLOGIC_MEDIA_VIDEOCAPTURE` in `video_priv.h`. The defconfig does
+not enable it, so **the tree does not compile as shipped**. The `.c` is right
+and the defconfig is incomplete, so enabling the option is the correct fix.
+
+Verified this survives `syncconfig`.
+
+> **Trap:** this tree does not let you simply switch a symbol off. Writing
+> `# CONFIG_SYSTEM_TRUSTED_KEYRING is not set` into `out/.config` and running
+> `syncconfig` silently turns it back on, and the build then dies in
+> `scripts/extract-cert.c` for want of `openssl/engine.h`. The cause was never
+> found. The fix used was to satisfy OpenSSL instead of fighting kconfig — see
+> step 5. **Verify config changes with a `syncconfig` afterwards.**
+
+### 4. Source patches — [`0001-option-D-local-build-fixes.patch`](../patches/0001-option-D-local-build-fixes.patch)
+
+```sh
+git apply ../patches/0001-option-D-local-build-fixes.patch
+```
+
+Two hunks:
+
+**a) `Makefile`** — adds `-Wno-error`.
+
+Amlogic's tree already suppresses a set of warnings gcc 13 raises
+(`array-compare`, `address`, `dangling-pointer`, `enum-int-mismatch`), but not
+`-Wunused-function`, which gcc 13 reports on static helpers this tree leaves
+unreferenced (`khadas-mcu.c:mcu_i2c_read_regs`,
+`vout2_serve.c:get_vout2_init_mode`). The `-Werror` here is unconditional apart
+from `ifndef CONFIG_KASAN`, so there is no config lever — opt out wholesale
+rather than chase warnings one at a time.
+
+**Revert this hunk if you build with the compiler the tree was written for.**
+
+**b) `arch/arm64/boot/dts/amlogic/Makefile`** — adds our two boards to `dtb-y`:
+
+```
+dtb-y += sc2_s905x4_ah212.dtb
+dtb-y += sc2_s905x4_ah212_linux.dtb
+```
+
+The `.dts` sources are present in the tree (`amlogic-dt-id = "sc2_s905x4_ah212"`)
+but CoreELEC's fork trimmed `dtb-y` down to the boards it ships, so ours was
+never built.
+
+### 5. OpenSSL headers
+
+The host had no OpenSSL headers, so `extract-cert` could not build. Headers came
+from Debian's `libssl-dev` package, extracted rather than installed:
+
+```sh
+dpkg-deb -x libssl-dev_3.5.7-1~deb13u3_amd64.deb build/sslprefix
+ln -s /usr/lib64/libcrypto.so.3 build/sslprefix/lib/libcrypto.so   # host runtime
+```
+
+Then pass these **on the `make` command line**:
+
+```sh
+P=$PWD/build/sslprefix
+make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE O=out \
+     CRYPTO_CFLAGS="-I$P/usr/include" \
+     CRYPTO_LIBS="-L$P/lib -lcrypto" \
+     Image dtbs
+```
+
+> They must be on the `make` line, not in the environment.
+> `scripts/Makefile` assigns `HOSTCFLAGS_extract-cert.o` and
+> `HOSTLDLIBS_extract-cert` per-object, so a global `HOSTCFLAGS` would be
+> overridden for exactly the object that needs them.
+
+### 6. Build
+
+```sh
+make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE O=out \
+     CRYPTO_CFLAGS="-I$P/usr/include" CRYPTO_LIBS="-L$P/lib -lcrypto" \
+     Image dtbs
+```
+
+Outputs:
+
+```
+out/arch/arm64/boot/Image                              34,551,816 bytes
+out/arch/arm64/boot/dts/amlogic/sc2_s905x4_ah212_linux.dtb   78,956 bytes
+```
+
+---
+
+## Use the `_linux` DTB variant
+
+The tree ships two device trees for this board and **they are not
+interchangeable**:
+
+| | `sc2_s905x4_ah212.dtb` | `sc2_s905x4_ah212_linux.dtb` |
+|---|---|---|
+| partitions | `partition_mbox_ab.dtsi` (Android A/B) | `partition_normal_linux.dtsi` |
+| display | **no DRM include at all** | `mesonsc2_drm.dtsi`, 28 hdmi/drm nodes |
+| reserved-memory | 100 MB | 128 MB |
+| `di_cma` pool | present | commented out |
+
+Booting the **Android** variant on Linux produced a `Synchronous Abort` with
+**zero console output** — it jumps into a device tree with no display subsystem
+and dies before `console_init`. Switching to `_linux` turned that into a clean
+boot to login.
+
+If you build this kernel, use `sc2_s905x4_ah212_linux.dtb`.
+
+---
+
+## Verify your build
+
+```
+5adbc4cc53cc3633cf44a07f0d61cc2937af41ed3c717846f253526b46c52dc9  Image
+176ddf27b9e392175dbbbd057449d023c7ddd8bda68210d54c71fccf585d2043  sc2_s905x4_ah212_linux.dtb
+```
+
+Byte-for-byte reproduction is not guaranteed — the build embeds a timestamp and
+the host toolchain differs — but the DTB should match exactly, and the `Image`
+should differ only in build metadata. What matters is that it is **non-PE** and
+boots:
+
+```sh
+xxd -l 64 Image | head -2     # 'ARMd' at 0x38, NO MZ header
+grep -c "CONFIG_EFI" out/.config   # "# CONFIG_EFI is not set"
+```
+
+If `Image` starts with `MZ`, it is ZBOOT-wrapped and this U-Boot cannot `booti`
+it.
+
+---
+
+## Memory sizing — a trap worth knowing
+
+The generic mainline DTB for this SoC family declares **4 GB**
+(`memory@0 reg = ... 0xffffffff`). On a 2 GB box the kernel is told memory exists
+that does not, initialises allocators over it, and dies before the first
+`printk` — no console output at all.
+
+The vendor DTBs declare 2 GB correctly. If you write your own DTB, check this
+first when you get total silence.
