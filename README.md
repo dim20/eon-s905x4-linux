@@ -15,8 +15,9 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 
 ## Status
 
-**v0.3-image** — a stick image you can `dd` and boot. Works on the development
-box. Not yet validated on other hardware.
+**v0.4-console** — a stick image you can `dd` and boot, and a box that gives
+you a **text console on the TV**. Works on the development box. Not yet
+validated on other hardware.
 
 | | |
 |---|---|
