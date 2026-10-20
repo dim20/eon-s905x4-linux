@@ -193,7 +193,7 @@ f	644	0:0	290	-	etc/emacs/site-start.d/50figlet.el
 f	644	0:0	0	-	etc/environment
 f	644	0:0	1936	-	etc/ethertypes
 f	644	0:0	20	-	etc/fake-hwclock.data
-f	644	0:0	642	-	etc/fstab
+f	644	0:0	355	-	etc/fstab
 f	644	0:0	37	-	etc/fw_env.config
 f	644	0:0	2584	-	etc/gai.conf
 f	644	0:0	665	-	etc/group
@@ -769,8 +769,9 @@ f	644	0:0	1102	-	etc/systemd/sleep.conf
 d	755	0:0	-	-	etc/systemd/system
 d	755	0:0	-	-	etc/systemd/system/bluetooth.target.wants
 l	777	0:0	-	/usr/lib/systemd/system/bluetooth.service	etc/systemd/system/bluetooth.target.wants/bluetooth.service
-l	777	0:0	-	/usr/lib/boot-run-once/boot-run-once-early.service	etc/systemd/system/boot-run-once-early.service
+l	777	0:0	-	/dev/null	etc/systemd/system/boot-run-once-early.service
 l	777	0:0	-	/usr/lib/boot-run-once/boot-run-once.service	etc/systemd/system/boot-run-once.service
+l	777	0:0	-	/dev/null	etc/systemd/system/chronyd-restricted.service
 l	777	0:0	-	/usr/lib/systemd/system/chrony.service	etc/systemd/system/chronyd.service
 d	755	0:0	-	-	etc/systemd/system/chrony-wait.service.d
 f	644	0:0	899	-	etc/systemd/system/chrony-wait.service.d/10-no-private-users.conf
@@ -799,6 +800,7 @@ l	777	0:0	-	/usr/lib/systemd/system/wpa_supplicant.service	etc/systemd/system/mu
 d	755	0:0	-	-	etc/systemd/system/network-online.target.wants
 l	777	0:0	-	/usr/lib/systemd/system/systemd-networkd-wait-online.service	etc/systemd/system/network-online.target.wants/systemd-networkd-wait-online.service
 l	777	0:0	-	/usr/lib/systemd/system/rng-tools-debian.service	etc/systemd/system/rng-tools.service
+l	777	0:0	-	/dev/null	etc/systemd/system/rsync.service
 d	755	0:0	-	-	etc/systemd/system/shutdown.target.wants
 l	777	0:0	-	/usr/lib/systemd/system/fake-hwclock-save.service	etc/systemd/system/shutdown.target.wants/fake-hwclock-save.service
 d	755	0:0	-	-	etc/systemd/system/sockets.target.wants
@@ -816,7 +818,6 @@ d	755	0:0	-	-	etc/systemd/system/ssh.socket.wants
 l	777	0:0	-	/usr/lib/systemd/system/sshd-keygen.service	etc/systemd/system/ssh.socket.wants/sshd-keygen.service
 l	777	0:0	-	/usr/lib/systemd/system/sysfsutils.service	etc/systemd/system/sysfs.service
 d	755	0:0	-	-	etc/systemd/system/sysinit.target.wants
-l	777	0:0	-	/usr/lib/boot-run-once/boot-run-once-early.service	etc/systemd/system/sysinit.target.wants/boot-run-once-early.service
 l	777	0:0	-	/usr/lib/systemd/system/fake-hwclock-load.service	etc/systemd/system/sysinit.target.wants/fake-hwclock-load.service
 l	777	0:0	-	/usr/lib/systemd/system/keyboard-setup.service	etc/systemd/system/sysinit.target.wants/keyboard-setup.service
 l	777	0:0	-	/usr/lib/systemd/system/systemd-network-generator.service	etc/systemd/system/sysinit.target.wants/systemd-network-generator.service
@@ -15998,7 +15999,6 @@ f	644	0:0	64	-	var/lib/systemd/deb-systemd-helper-enabled/apt-daily-upgrade.time
 f	644	0:0	104	-	var/lib/systemd/deb-systemd-helper-enabled/bluetooth.service.dsh-also
 d	755	0:0	-	-	var/lib/systemd/deb-systemd-helper-enabled/bluetooth.target.wants
 f	644	0:0	0	-	var/lib/systemd/deb-systemd-helper-enabled/bluetooth.target.wants/bluetooth.service
-f	644	0:0	71	-	var/lib/systemd/deb-systemd-helper-enabled/chronyd-restricted.service.dsh-also
 f	644	0:0	0	-	var/lib/systemd/deb-systemd-helper-enabled/chronyd.service
 f	644	0:0	95	-	var/lib/systemd/deb-systemd-helper-enabled/chrony.service.dsh-also
 f	644	0:0	64	-	var/lib/systemd/deb-systemd-helper-enabled/chrony-wait.service.dsh-also
