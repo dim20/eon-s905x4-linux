@@ -25,7 +25,7 @@ box. Not yet validated on other hardware.
 | systemd | ✅ running as PID 1 — 0 failed units, `apt` works |
 | 4 cores | ✅ |
 | Ethernet 100 Mbps | ✅ internal RMII PHY |
-| HDMI | negotiated 1080p60 over EDID, DRM initialises — **picture never confirmed on a screen** |
+| HDMI | ✅ **1920×1080 output confirmed on a real display** |
 | Audio | ASoC card + SPDIF register — **never confirmed audible** |
 | USB 2.0 / 3.0 | ✅ |
 | Bluetooth | present |
@@ -72,17 +72,50 @@ system, run `scripts/grow-stick.sh` against it first.
 
 These are real and will bite you:
 
-1. **HDMI and audio have never been seen working.** DRM negotiates a mode and
-   the ASoC card registers, but nobody has looked at a screen or heard a
-   speaker. Treat both as untested.
-2. **The clock fallback is only unit-tested.** The chrony success path is
+1. **Audio has never been confirmed audible.** The ASoC card registers and
+   the HDMI transmitter reports a valid audio format, but nobody has heard
+   a speaker.
+2. **There is no desktop on the image, and no text console on the TV.** The
+   image is deliberately headless so it stays small enough to fit a 1 GB
+   stick and boots in about 7 seconds. The display output itself works — the
+   connector goes live at 1920×1080 — but the kernel has no framebuffer
+   console, so a text terminal cannot be rendered on the HDMI output. You get
+   a **serial console and SSH**.
+
+   **Neither XFCE nor LightDM is part of the image, and neither is any other
+   desktop or display manager.** That is deliberate, and the image build
+   refuses to produce an image that contains one: a display manager takes the
+   framebuffer away from the text console, and a desktop is 450 MB of
+   packages that the user may not want.
+
+   Install a desktop when you want one:
+
+   ```sh
+   tasksel
+   ```
+
+   which offers XFCE, GNOME, KDE, LXDE and LXQt, and the Debian
+   `task-*-desktop` packages are the same thing. XFCE with LightDM is
+   confirmed to work here: it runs on X's *modesetting* driver, talking to
+   DRM directly, and the greeter is verified on a real display. The desktop
+   is not part of the image, so it is not part of what we tested — but the
+   display path underneath it is.
+3. **The first paint is slow, and the kernel logs warnings.** Xorg's atomic
+   commit waits for a vblank the vendor driver never delivers
+   (`[CRTC:64:VPP-0] vblank wait timed out`), which stalls the boot by about
+   90 seconds. Expect it, and expect that warning in `dmesg`.
+4. **No GPU-accelerated 3D.** The vendor DRM driver advertises no dma-buf
+   modifier support, so Mesa's GBM has nothing to negotiate and `kmscube`
+   fails. A 2D desktop is unaffected — it does not need dma-buf — but
+   hardware-accelerated 3D is not available.
+4. **The clock fallback is only unit-tested.** The chrony success path is
    proven on hardware; the "no network at boot" path has not been exercised on
    a real box.
-3. **The default root password is `tvbox`.** Change it, or do not put the box
+5. **The default root password is `tvbox`.** Change it, or do not put the box
    on an untrusted network.
-4. **Only one box has been tested.** Everything below was proven on one
+6. **Only one box has been tested.** Everything below was proven on one
    development box. It has not been tested on any other hardware.
-5. **The first boot may need the vendor's own update path.** If your box does
+7. **The first boot may need the vendor's own update path.** If your box does
    not find `aml_autoscript` on the stick by itself, see
    [`docs/recovery.md`](docs/recovery.md) — you will need a UART console once.
 
@@ -217,10 +250,16 @@ Licensed by component, because they are not the same work:
 |---|---|
 | `scripts/`, `docs/`, `notes/`, `patches/` | **MIT** — see [LICENSE](LICENSE) |
 | `kernel/Image`, `kernel/*.dtb` | **GPL-2.0** — built from CoreELEC / Amlogic sources |
+| the Debian rootfs in the stick image | **GPL-2.0** and the licences of the Debian packages it contains |
 
-The kernel and DTB are **not ours**. They are built from GPL-2.0 sources and are
-redistributed under those terms, with full source provenance in
-[`docs/build-the-kernel.md`](docs/build-the-kernel.md) as GPL-2.0 requires.
+**The rootfs is not MIT.** It is derived from
+[devmfc/debian-on-amlogic](https://github.com/devmfc/debian-on-amlogic),
+which is GPL-2.0, and the corresponding source for it is that upstream
+project. The kernel's source provenance is in
+[`docs/build-the-kernel.md`](docs/build-the-kernel.md), as GPL-2.0 requires.
+
+Full detail, and the credits this project owes, are in
+[`docs/licensing.md`](docs/licensing.md).
 
 ---
 

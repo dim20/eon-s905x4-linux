@@ -1,6 +1,14 @@
 # Option D: intentional config changes on top of meson64_a64_P_defconfig
 #
-# Applied with:  ./scripts/config --file out/.config --enable AMLOGIC_MEDIA_VIDEOCAPTURE
+# Applied with:
+#   ./scripts/config --file out/.config --enable AMLOGIC_MEDIA_VIDEOCAPTURE
+#   ./scripts/config --file out/.config --enable DRM_MESON_EMULATE_FBDEV
+#   ./scripts/config --file out/.config --enable FRAMEBUFFER_CONSOLE
+#   ./scripts/config --file out/.config --enable FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
+#   ./scripts/config --file out/.config --enable FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
+#
+# ---------------------------------------------------------------------------
+# CONFIG_AMLOGIC_MEDIA_VIDEOCAPTURE
 #
 # WHY: drivers/amlogic/media/video_sink/video_hw.c uses vd_layer[].capture_use_cnt,
 # .capture_frame_req and CAPTURE_STATE_* unconditionally, but all three are inside
@@ -10,3 +18,71 @@
 #
 # Verified to survive syncconfig.
 CONFIG_AMLOGIC_MEDIA_VIDEOCAPTURE=y
+#
+# ---------------------------------------------------------------------------
+# CONFIG_DRM_MESON_EMULATE_FBDEV
+#
+# WHY: this is what makes the display usable.
+#
+# The vendor's DRM driver has a complete framebuffer emulation
+# (drivers/amlogic/drm/meson_fbdev.c) which creates a /dev/fbN for the
+# PRIMARY plane and one per OSD plane, using drm_fb_helper. It is all present
+# and correct, but the whole thing sits behind this option:
+#
+#     drivers/amlogic/drm/meson_drv.c:355
+#         #ifdef CONFIG_DRM_MESON_EMULATE_FBDEV
+#                 ret = am_meson_drm_fbdev_init(drm);
+#         #endif
+#
+# Without it there is no DRM framebuffer at all — only the four vendor OSD
+# overlays, which have no fix_screeninfo.visual.weight and so are rejected
+# by X's fbdev driver:
+#
+#     (EE) FBDEV(0): Weight given (000) is inconsistent with the depth (32)
+#
+# The DTB already provides everything it needs (fbdev_sizes,
+# primary_plane_index, status=okay) and meson_drv.c already sets
+# drm->irq_enabled = true for the vblank path. Nothing else is required.
+CONFIG_DRM_MESON_EMULATE_FBDEV=y
+#
+# ---------------------------------------------------------------------------
+# CONFIG_FRAMEBUFFER_CONSOLE and CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY
+#
+# WHY: so there is a text console on the HDMI output, not only on the
+# serial port.
+#
+# This kernel has CONFIG_VT_CONSOLE=y but no framebuffer console, so
+# /proc/consoles lists only ttyS0 and agetty on tty1 has a VT that nothing
+# scans out to the display. Enabling fbcon binds a VT to the framebuffer.
+#
+# The option is named FRAMEBUFFER_CONSOLE, not FB_CONSOLE, and the
+# implementation lives at drivers/video/fbdev/core/fbcon.c in this tree.
+#
+# DETECT_PRIMARY makes fbcon pick the PRIMARY display device, which is the
+# one the HDMI transmitter actually scans out (the vendor OSD overlays are a
+# different plane).
+CONFIG_FRAMEBUFFER_CONSOLE=y
+CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY=y
+#
+# ---------------------------------------------------------------------------
+# CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
+#
+# WHY: fbcon must not take the console over at the moment the framebuffers
+# register.
+#
+# Upstream defers the takeover until the first text is displayed on the
+# console, and that is exactly what is needed here: the vendor's DRM
+# framebuffer is created during probe, before the HDMI pipeline is up, and
+# taking the console over at that point programs a mode set that the vendor
+# atomic-commit path cannot satisfy (it waits for a vblank that never
+# arrives - see the vblank bug).
+#
+# With the option on, fbcon registers and waits. The takeover then happens
+# when agetty writes the login prompt to the virtual terminal, which is
+# after the display is live.
+#
+# NOTE: on this architecture fb_is_primary_device() returns 0, so
+# DETECT_PRIMARY on its own does nothing; the framebuffer console is bound
+# to the right device because the vendor driver marks its primary-plane
+# framebuffer FBINFO_PRIMARY - see patches/0003.
+CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER=y

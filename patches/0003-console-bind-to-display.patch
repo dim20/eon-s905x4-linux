@@ -1,0 +1,136 @@
+From: eon-s905x4-linux
+Subject: [PATCH] console: bind the framebuffer console to the display, and give it a size
+
+Three changes that together make the text console work on the HDMI output.
+
+1. drivers/amlogic/drm/meson_fbdev.c: the framebuffer's var.xres/var.yres were
+   taken from the CRTC's mode, which is empty at probe time, so both were
+   zero. The DRM plane is programmed from var.xres/var.yres, so the plane
+   was given a zero-sized source and nothing was ever scanned out. Use the
+   framebuffer's own geometry when the CRTC has no mode yet.
+
+2. The same file marks the primary plane's framebuffer with the new
+   FBINFO_PRIMARY flag.
+
+3. drivers/video/fbdev/core/fbcon.c: fbcon now honours FBINFO_PRIMARY, and
+   con2fb_map_boot is initialised to -1 instead of 0. It is compared
+   against the framebuffer node when the console is bound, so a zeroed
+   array silently means "framebuffer 0".
+
+Without (3) the console binds to the first framebuffer that registers, which
+on this hardware is one of the vendor's OSD overlays. Those buffers live in
+a reserved-memory region that is not in the kernel's direct map, so the
+console's blitter writes to an unmapped address and the machine oopses:
+
+    bitfill_aligned+0xec
+    cfb_fillrect+0xd4
+    bit_clear_margins+0xcc
+    fbcon_clear_margins+0x80
+    fbcon_switch+0x394
+    do_fbcon_takeover+0x84
+    fbcon_fb_registered+0x100
+
+---
+
+diff --git a/drivers/amlogic/drm/meson_fbdev.c b/drivers/amlogic/drm/meson_fbdev.c
+index fdc44002e..ed4cfaf9c 100644
+--- a/drivers/amlogic/drm/meson_fbdev.c
++++ b/drivers/amlogic/drm/meson_fbdev.c
+@@ -572,10 +572,23 @@ static int am_meson_drm_fbdev_probe(struct drm_fb_helper *helper,
+ 	am_meson_drm_fbdev_modeset_create(helper);
+ 
+ 	drm_mode_get_hv_timing(&fbdev->modeset.crtc->mode, &hdisplay, &vdisplay);
++	if (!hdisplay || !vdisplay) {
++		/*
++		 * The CRTC has not been given a mode yet, so the timing is
++		 * zero. Fall back to the framebuffer's own geometry: the
++		 * surface is the visible area, the virtual area is the
++		 * double-buffered surface. Leaving these at zero makes the
++		 * framebuffer console believe the display is 0x0, and the
++		 * plane is then programmed with a zero-sized source, so
++		 * nothing is ever scanned out.
++		 */
++		hdisplay = sizes.surface_width;
++		vdisplay = sizes.surface_height / 2;
++	}
+ 	fbi->var.xres = hdisplay;
+ 	fbi->var.yres = vdisplay;
+-	fbi->var.xres_virtual = hdisplay;
+-	fbi->var.yres_virtual = vdisplay * 2;
++	fbi->var.xres_virtual = sizes.surface_width;
++	fbi->var.yres_virtual = sizes.surface_height;
+ 
+ 	return 0;
+ 
+@@ -722,6 +735,15 @@ int am_meson_drm_fbdev_init(struct drm_device *dev)
+ 	if (drmdev->primary_plane) {
+ 		fbdev = am_meson_create_drm_fbdev(dev, drmdev->primary_plane);
+ 		fbdev->zorder = OSD_PLANE_BEGIN_ZORDER;
++		/*
++		 * This is the framebuffer that is scanned out to the display,
++		 * so it is the one the text console belongs to. Say so
++		 * explicitly: without it the console binds to whichever
++		 * framebuffer registered first, which is one of the OSD
++		 * overlays, and those are not CPU-accessible.
++		 */
++		if (fbdev->base.fbdev)
++			fbdev->base.fbdev->flags |= FBINFO_PRIMARY;
+ 		DRM_INFO("create fbdev for primary plane [%p]\n", fbdev);
+ 	}
+ 
+diff --git a/drivers/video/fbdev/core/fbcon.c b/drivers/video/fbdev/core/fbcon.c
+index 8721b7513..72a41c9e0 100644
+--- a/drivers/video/fbdev/core/fbcon.c
++++ b/drivers/video/fbdev/core/fbcon.c
+@@ -2949,7 +2949,7 @@ void fbcon_remap_all(struct fb_info *info)
+ static void fbcon_select_primary(struct fb_info *info)
+ {
+ 	if (!map_override && primary_device == -1 &&
+-	    fb_is_primary_device(info)) {
++	    (fb_is_primary_device(info) || (info->flags & FBINFO_PRIMARY))) {
+ 		int i;
+ 
+ 		printk(KERN_INFO "fbcon: %s (fb%i) is primary device\n",
+@@ -3444,6 +3444,18 @@ void __init fb_console_init(void)
+ 	for (i = 0; i < MAX_NR_CONSOLES; i++)
+ 		con2fb_map[i] = -1;
+ 
++	/*
++	 * con2fb_map_boot is the map the console starts from, and it is
++	 * compared against the framebuffer node in fbcon_fb_registered().
++	 * Leaving it zero means "framebuffer 0", so the console silently
++	 * binds to the first framebuffer that registers - which is not
++	 * necessarily a usable one. Mark it as unset, exactly like
++	 * con2fb_map, so that only an explicit decision (a primary device,
++	 * or fbcon=map: on the command line) binds the console.
++	 */
++	for (i = 0; i < MAX_NR_CONSOLES; i++)
++		con2fb_map_boot[i] = -1;
++
+ 	fbcon_start();
+ 	console_unlock();
+ }
+diff --git a/include/linux/fb.h b/include/linux/fb.h
+index 8221838fe..022ea5d53 100644
+--- a/include/linux/fb.h
++++ b/include/linux/fb.h
+@@ -433,6 +433,19 @@ struct fb_tile_ops {
+  */
+ #define FBINFO_HIDE_SMEM_START  0x200000
+ 
++/*
++ * FBINFO_PRIMARY
++ * @FBINFO_PRIMARY: set on the framebuffer that represents the display the
++ * user is actually looking at.
++ *
++ * The framebuffer console uses this to decide which framebuffer the text
++ * console belongs to. Without it the console binds to whichever framebuffer
++ * happened to register first, which on this hardware is one of the vendor's
++ * OSD overlays: those are not CPU-accessible, so the console's blitter writes
++ * to an address that is not mapped and the machine oopses.
++ */
++#define FBINFO_PRIMARY		0x400000
++
+ 
+ struct fb_info {
+ 	atomic_t count;

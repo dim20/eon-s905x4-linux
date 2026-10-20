@@ -161,6 +161,40 @@ if [ -e "$ROOTFS_TREE/etc/machine-id" ]; then
     log "  removed the machine-id — systemd will generate a unique one per box"
 fi
 
+# ---------------------------------------------------------------- no desktop
+# The image ships NO desktop. A desktop is 450 MB of packages and a display
+# manager that grabs the framebuffer console, and the whole point of this
+# image is a small, minimal system with a TEXT console on the HDMI output.
+# The user picks a desktop afterwards with tasksel.
+#
+# This is checked rather than assumed: a build machine that happens to have a
+# desktop installed would otherwise quietly ship one, and the display manager
+# would fight the console for the framebuffer.
+DESKTOP_PKGS="lightdm lightdm-gtk-greeter gdm3 sddm xfce4 xfce4-session
+              task-xfce-desktop task-lxde-desktop task-lxqt-desktop
+              task-gnome-desktop task-kde-desktop xserver-xorg-core
+              xserver-xorg xserver-xorg-input-all xinit"
+STATUS="$ROOTFS_TREE/var/lib/dpkg/status"
+if [ -f "$STATUS" ]; then
+    for p in $DESKTOP_PKGS; do
+        if grep -q "^Package: ${p}$" "$STATUS"; then
+            die "the source tree has $p installed.
+  The published image must not contain a desktop or a display manager:
+  the text console on the HDMI output needs the framebuffer, and a display
+  manager takes it. Remove it from the tree first, for example:
+      chroot $ROOTFS_TREE apt-get purge --auto-remove $p
+  and leave tasksel in place so the user can choose a desktop later."
+        fi
+    done
+    if ! grep -q "^Package: tasksel$" "$STATUS"; then
+        die "the source tree has no tasksel.
+  Without it the user cannot choose a desktop after installing."
+    fi
+    log "  no desktop packages in the source tree; tasksel is present"
+else
+    log "  WARNING: no dpkg status file - cannot check for desktop packages"
+fi
+
 # ---------------------------------------------------------------- overrides
 # Drop-in unit overrides that the image needs on this hardware. They are
 # applied to the source tree before it is built into the image, so a rebuilt

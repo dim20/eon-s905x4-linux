@@ -1,28 +1,23 @@
 # Licensing of the files in this directory
 
 `Image` and `sc2_s905x4_ah212_linux.dtb` are **not** covered by the MIT licence
-at the repository root.
-
-They are built from GPL-2.0 sources:
+at the repository root. They are built from GPL-2.0 sources:
 
 | | |
 |---|---|
 | Source | https://github.com/CoreELEC/linux-amlogic |
 | Branch | `amlogic-5.4.210` |
 | Commit | `a3aaaa5b0` |
-| Licence | GNU General Public License version 2 |
 
-They are redistributed under the **GNU General Public License version 2**.
+Our configuration and local patches are published in `patches/`, and the
+exact build steps — including the toolchain — are in
+[`docs/build-the-kernel.md`](../docs/build-the-kernel.md). That is what
+satisfies the GPL-2.0 requirement to offer the corresponding source.
 
-GPL-2.0 §3 requires that the Corresponding Source accompany any binary
-distribution. It does, via
-[`../docs/build-the-kernel.md`](../docs/build-the-kernel.md), which gives:
+Note that `sc2_s905x4_ah212_linux.dtb` differs from the upstream device
+tree by one property: the vendor's `fb` node ships with `status =
+"disabled"`, and it is set to `"okay"` here so that the framebuffer driver
+binds and the HDMI output can be enabled. The full diff is one line.
 
-- the exact upstream source, branch and commit
-- the build configuration (`meson64_a64_P_defconfig`) and the config delta
-- the local patches ([`../patches/`](../patches/))
-- the complete build procedure
-- the toolchain used (Bootlin `aarch64--glibc--stable-2024.05-1`, gcc 13.3.0)
-- which build artefacts are outputs
-
-The DTB is compiled from Amlogic's GPL-2.0 `.dts` sources in the same tree.
+For the licensing of the rootfs inside the stick image, and for credits,
+see [`docs/licensing.md`](../docs/licensing.md).
