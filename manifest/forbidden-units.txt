@@ -1,0 +1,35 @@
+# systemd units that must NOT be enabled in the image.
+#
+# The mirror image of manifest/required-units.txt: a unit listed here has
+# no business being switched on.
+#
+# "Enabled" means there is a symlink to the unit somewhere under
+# /etc/systemd/system/*.wants/ - which is what "systemctl enable" creates
+# and what "systemctl is-enabled" reports on.
+#
+# Lines starting with '#' and blank lines are ignored.
+
+# --- the vendor's early boot scripts --------------------------------------
+# Its only script was the stick-growing one, which we removed on purpose
+# (see manifest/forbidden-paths.txt). With the script gone, the unit's
+# post-step - "chmod -x /etc/boot-run-once/early/*" - fails because the
+# directory no longer exists, and the unit fails with it.
+#
+# A failed unit at boot is not just untidy: it makes "systemctl --failed"
+# non-empty, and it is the sort of thing that makes people stop reading
+# the output of it.
+boot-run-once-early.service
+
+# --- the vendor's second NTP daemon ---------------------------------------
+# The vendor's image enables BOTH chrony.service and chronyd-restricted.
+# They run the same binary with the same configuration, and whichever
+# starts first takes port 323 - so the other one fails to bind and gives
+# up, silently. chronyd-restricted.service won, and chrony.service was
+# left "inactive (dead)": a unit that is enabled, present, and not
+# running.
+#
+# chrony.service is the one that is kept: it is the one the manifest
+# requires, and it is the one with the RuntimeDirectory. Verified on the
+# box - with chronyd-restricted disabled, chrony.service starts, selects
+# a source and reports "Leap status: Normal".
+chronyd-restricted.service

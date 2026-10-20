@@ -158,21 +158,40 @@ check_forbidden_paths() {
 }
 
 # ---------------------------------------------------------------- units
+# Is a unit enabled? A unit is enabled when there is a symlink to it
+# somewhere under /etc/systemd/system/*.wants/ - which is what
+# "systemctl enable" creates and what "systemctl is-enabled" reports on.
+unit_enabled() {
+    local unit=$1 d
+    for d in "$ROOTFS"/etc/systemd/system/*.wants; do
+        [ -d "$d" ] || continue
+        if [ -e "$d/$unit" ] || [ -L "$d/$unit" ]; then return 0; fi
+    done
+    return 1
+}
+
 check_units() {
-    local unit d
+    local unit
     while read -r unit; do
         [ -n "$unit" ] || continue
-        local found=no
-        for d in "$ROOTFS"/etc/systemd/system/*.wants; do
-            [ -d "$d" ] || continue
-            if [ -e "$d/$unit" ] || [ -L "$d/$unit" ]; then found=yes; break; fi
-        done
-        if [ "$found" = yes ]; then
+        if unit_enabled "$unit"; then
             ok
         else
             fail "the unit '$unit' is not enabled (no symlink in any *.wants directory)"
         fi
     done < <(entries "$MANIFEST/required-units.txt")
+}
+
+check_forbidden_units() {
+    local unit
+    while read -r unit; do
+        [ -n "$unit" ] || continue
+        if unit_enabled "$unit"; then
+            fail "the unit '$unit' is FORBIDDEN but is enabled"
+        else
+            ok
+        fi
+    done < <(entries "$MANIFEST/forbidden-units.txt")
 }
 
 # ---------------------------------------------------------------- global
@@ -278,6 +297,7 @@ fi
 check_required_paths
 check_forbidden_paths
 [ -f "$MANIFEST/required-units.txt" ] && check_units
+[ -f "$MANIFEST/forbidden-units.txt" ] && check_forbidden_units
 [ -f "$MANIFEST/global.txt" ] && check_global
 check_p1
 

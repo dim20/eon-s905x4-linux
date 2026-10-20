@@ -40,6 +40,16 @@
 /etc/boot-run-once/early/01-resize-rootfs
 /etc/boot-run-once/early/*resize*
 
+# --- the marker that re-enables the vendor's second NTP daemon -------------
+# /var/lib/systemd/deb-systemd-helper-enabled/<unit>.dsh-also holds the
+# path of a symlink to create. systemd runs deb-systemd-helper as a
+# generator at every boot, so a unit with a marker is enabled on every
+# boot - whatever the image says, and whatever you disable by hand.
+#
+# The vendor's image has one for chronyd-restricted.service, which
+# duplicates chrony.service and takes port 323 from it.
+/var/lib/systemd/deb-systemd-helper-enabled/chronyd-restricted.service.dsh-also
+
 # --- runtime state --------------------------------------------------------
 # /run is runtime state: pid files, sockets, caches, and the template that
 # update-motd writes for the login message. None of it belongs in an

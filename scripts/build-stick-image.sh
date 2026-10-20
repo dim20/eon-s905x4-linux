@@ -364,6 +364,61 @@ for f in "$ROOTFS_TREE"/etc/boot-run-once/early/*resize*; do
 done
 rmdir "$ROOTFS_TREE"/etc/boot-run-once/early 2>/dev/null || true
 
+# The unit that RAN that script is now disabled.
+#
+# boot-run-once-early.service runs the scripts in /etc/boot-run-once/early
+# - which was the resize script and nothing else - and its post-step is
+# "chmod -x /etc/boot-run-once/early/*". With the directory gone, that
+# fails, and the unit fails with it: a failed unit at every boot, which
+# makes "systemctl --failed" non-empty for the rest of the system's life.
+#
+# The other one, boot-run-once.service, is left enabled: it runs
+# /etc/boot-run-once/03-set_fw_env_config, which writes the
+# fw_setenv configuration the installer uses.
+for u in boot-run-once-early.service; do
+    for d in "$ROOTFS_TREE"/etc/systemd/system/*.wants; do
+        [ -d "$d" ] || continue
+        if [ -e "$d/$u" ] || [ -L "$d/$u" ]; then
+            rm -f "$d/$u"
+            log "  disabled $u (it had nothing left to run)"
+        fi
+    done
+done
+
+# The vendor's image enables TWO chrony units: chronyd-restricted.service
+# and chrony.service. They run the same binary with the same
+# configuration, and whichever starts first takes port 323 - so the other
+# one fails to bind and gives up, silently.
+#
+# chronyd-restricted.service won, and chrony.service was left "inactive
+# (dead)" - a unit that is enabled, present, and not running. chrony
+# service is the one the manifest requires, and it is the one with the
+# RuntimeDirectory, so it is the one to keep.
+#
+# The interesting part is HOW the vendor's unit gets enabled. It is not
+# a symlink in the image at all: /var/lib/systemd/deb-systemd-helper-
+# enabled/chronyd-restricted.service.dsh-also contains the path of the
+# symlink to create, and deb-systemd-helper - which systemd runs as a
+# generator, at every boot - creates it. So the unit reappears on every
+# boot no matter what the image says.
+#
+# Verified on the box: with chronyd-restricted disabled, chrony.service
+# starts, selects a source and reports "Leap status: Normal".
+for u in chronyd-restricted.service; do
+    for d in "$ROOTFS_TREE"/etc/systemd/system/*.wants; do
+        [ -d "$d" ] || continue
+        if [ -e "$d/$u" ] || [ -L "$d/$u" ]; then
+            rm -f "$d/$u"
+            log "  disabled $u (it duplicated chrony.service and lost the port)"
+        fi
+    done
+    for m in "$ROOTFS_TREE"/var/lib/systemd/deb-systemd-helper-enabled/"$u".dsh-also; do
+        [ -e "$m" ] || continue
+        rm -f "$m"
+        log "  removed the deb-systemd-helper marker that re-enabled $u at every boot"
+    done
+done
+
 # ------------------------------------------------- enable our own units
 # A unit file that is not enabled never runs. enable-hdmi.service
 # programs the HDMI output at boot - the vendor driver leaves the
