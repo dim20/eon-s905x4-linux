@@ -32,7 +32,17 @@ die()  { printf '[write-stick] ERROR: %s\n' "$*" >&2; exit 1; }
 
 [ -n "$IMG" ] && [ -n "$DEV" ] || die "usage: $0 <image.img.gz> /dev/sdX"
 [ -f "$IMG" ] || die "$IMG not found"
-[ -b "$DEV" ] || die "$DEV is not a block device"
+[ -b "$DEV" ] || die "$DEV is not a block device.
+  If it is a REGULAR FILE, something created a file with that name and it
+  is shadowing the device node. dd will then write into the file and fill
+  it up - which looks exactly like a full disk, and is not one.
+
+  Remove the file and let udev create the node again:
+      rm -f $DEV
+      udevadm trigger --subsystem-match=block --action=add
+
+  or create it by hand from /proc/partitions:
+      mknod $DEV b <major> <minor>"
 
 command -v gzip >/dev/null || die "gzip not found"
 command -v cmp >/dev/null || die "cmp not found"
