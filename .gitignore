@@ -2,6 +2,12 @@
 # Download it from the Releases page and verify with kernel/SHA256SUMS.
 kernel/Image
 
+# The release artefacts are built and uploaded to the Releases page.
+# Only the checksums are kept here, because they are small and they say
+# what the release contains.
+dist/*
+!dist/SHA256SUMS
+
 # local scratch
 *.log
 *.img

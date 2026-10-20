@@ -1,0 +1,23 @@
+# The files that must be at the ROOT of the boot partition (p1).
+#
+# The boot partition is FAT32, because the vendor's U-Boot can only
+# "fatload" from FAT. The kernel is loaded from a different filesystem
+# type than the one the OS runs from, and that asymmetry is required.
+#
+# The layout is FLAT - these files are at the root, not under a "d/"
+# directory. The vendor's loader does not understand "d/", and a boot
+# command that points at a path the stick does not have is a silent
+# failure.
+#
+# The hashes of the kernel and the device tree are not here: they live in
+# kernel/SHA256SUMS, so there is one place that says what the kernel is.
+# Lines starting with '#' and blank lines are ignored.
+
+Image
+sc2_s905x4_ah212_linux.dtb
+
+# The vendor's boot script. It is a uImage, built by the vendor's
+# mkimage, and it is the entry vector: the vendor bootloader scans the
+# stick, finds it, and runs it. It must boot the STICK (root=/dev/sda2),
+# not the eMMC - the eMMC is what we are replacing.
+aml_autoscript

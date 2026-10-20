@@ -1,0 +1,59 @@
+# Paths that MUST NOT exist in the image.
+#
+# Format, one glob per line, matched against the path RELATIVE to the
+# root of the image. A glob does NOT match across a "/" - so
+# "/etc/ssh/ssh_host_*_key" matches "etc/ssh/ssh_host_rsa_key" but not
+# "etc/ssh/ssh_host_rsa_key.pub".
+#
+# A line starting with "!" is an EXCEPTION: a path matching it is allowed
+# even if it also matches a forbidden pattern.
+#
+# Lines starting with '#' and blank lines are ignored.
+
+# --- the machine identity -------------------------------------------------
+# Every box flashed with the same image must not share one identity.
+# systemd generates a transient machine-id when the file is absent and
+# persists it on the first boot, so each box gets its own.
+/etc/machine-id
+
+# --- the SSH host keys ----------------------------------------------------
+# Same reason: the private halves must be generated per box. The .pub
+# halves are harmless and are left alone.
+/etc/ssh/ssh_host_*_key
+
+# --- the vendor's login-message hooks ------------------------------------
+# These print terminal escape sequences and Amlogic branding, which the
+# framebuffer console renders literally. Ours live in
+# /etc/update-motd.d - see manifest/required-paths.txt.
+/usr/lib/qubian/update-motd.d/*
+
+# --- the vendor's stick-growing script -----------------------------------
+# /etc/boot-run-once/early/01-resize-rootfs runs "parted resizepart ...
+# 100%" and "resize2fs" on whatever the root filesystem is. On the stick
+# that rewrites the partition table and grows the filesystem to fill the
+# device on every boot, so the stick stops being the image we published
+# and the install source becomes "the whole stick" rather than 800 MB.
+# On the eMMC it repartitions the flash on every boot.
+#
+# We grow the stick explicitly, on purpose, with scripts/grow-stick.sh,
+# and the installer grows the eMMC's filesystem itself.
+/etc/boot-run-once/early/01-resize-rootfs
+/etc/boot-run-once/early/*resize*
+
+# --- runtime state --------------------------------------------------------
+# /run is runtime state: pid files, sockets, caches, and the template that
+# update-motd writes for the login message. None of it belongs in an
+# image. A stale motd.dynamic is worse than useless - it means the box
+# greets you with the vendor's banner, escape sequences and all.
+#
+# /run/sshd is the one exception: sshd insists that the directory exists
+# and is root-owned, and it is created by the build.
+/run/*
+!/run/sshd
+
+# --- the vendor's kernel modules -----------------------------------------
+# The image boots OUR kernel (kernel/Image, 5.4.210-ga3aaaa5b0e64-dirty).
+# These modules are for a different kernel (6.18.55-meson64), so they
+# cannot be loaded - they are 83 MB of dead weight in an 800 MB partition
+# that they can never be used from.
+/lib/modules/*

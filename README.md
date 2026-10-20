@@ -215,6 +215,17 @@ docs/
   recovery.md                     unlock / ADNL / fastboot, and how to get back in
   troubleshooting.md              the traps, written down so you can avoid them
   lessons.md                      engineering lessons from this project
+manifest/
+  required-packages.txt           packages the image must contain
+  forbidden-packages.txt          packages it must not (no desktop, no display manager)
+  required-paths.txt              files it must contain, with their modes
+  forbidden-paths.txt             files it must not contain
+  required-units.txt              systemd units it must have enabled
+  global.txt                      rules that apply to the whole rootfs
+  boot-artifacts.txt              what must be at the root of the boot partition
+  inventory.txt                   every file in the image, with owner, mode, size, checksum
+  provenance.txt                  where the rootfs came from, and what we changed
+  vendor-leftovers.txt            what is still the vendor's, and what it costs
 scripts/
   install-to-emmc.sh              provision eMMC from a running box
   rescue-init.sh                  minimal init — the fallback if systemd fails
@@ -222,6 +233,9 @@ scripts/
   prepare-stick.sh                make a stick a self-contained live system
   grow-stick.sh                   extend a stick's rootfs into leftover space
   build-stick-image.sh            build the published .img.gz from a rootfs tree
+  check-image.sh                  check an image against the manifest
+  inventory.sh                    write down what is in an image, and diff it
+  release.sh                      build a release, check it, print the test checklist
   write-stick-image.sh            write it to a stick and verify it byte-for-byte
   stick/                          the aml_autoscript uImage and its source
   uart/                           serial console tooling
@@ -237,6 +251,38 @@ Download it from the Releases page and check it against `kernel/SHA256SUMS`.
 
 ---
 
+## The manifest
+
+`manifest/` is the answer to "what is in this image, and what must be in
+it". It is **data**, not code: plain text files listing what the image
+must contain, what it must not, and which of the vendor's leftovers are
+still in there.
+
+The build checks the image it has just produced against it and **refuses to
+produce an image that fails**. `scripts/check-image.sh` can also be run
+by hand against any rootfs tree:
+
+```sh
+scripts/check-image.sh --rootfs /path/to/tree --p1 /path/to/p1.img
+```
+
+Two things follow from this that are worth knowing:
+
+* **The build does not modify its input.** It copies the rootfs tree to a
+  scratch directory first and works on the copy, so the tree you give it
+  is exactly the tree you still have afterwards — and building twice gives
+  the same result as building once.
+* **The build is reproducible.** The filesystem's timestamps and UUIDs and
+  the gzip header are all pinned, so the same tree gives the same image,
+  byte for byte. The image's hash is a statement about its content rather
+  than about when it was built.
+
+`manifest/inventory.txt` lists every file in the image with its owner,
+mode, size and checksum. Every build prints the difference against it, so
+"what changed in this release" is a diff rather than a surprise.
+
+---
+
 ## Roadmap
 
 | | Phase |
@@ -246,10 +292,14 @@ Download it from the Releases page and check it against `kernel/SHA256SUMS`.
 | P2 | automated installer: stick → box → standalone — **done** |
 | P3 | recovery `bootcmd`: stick present means "re-provision me" — **done** |
 | P4 | systemd — a real OS rather than a rescue shell — **done** |
-| P5 | **text console on HDMI — done**; confirm audio on real hardware; WiFi driver |
+| P5a | text console on the HDMI output — **done** |
+| P5b | the vblank interrupt — the desktop path only; **parked** |
+| P5c | audio and WiFi — expected to work; neither verified by a human yet |
 | P6 | packaging that assumes nothing about *this* box — **mostly done** |
 | P7 | optional boot menu via `sysboot`/extlinux — deferred |
 | P8 | rollout to other hardware, once validated |
+| P9 | first-boot setup wizard, so the published root password goes away — v0.5 |
+| P10 | the manifest, the inventory, and a build that does not eat its input — **done** |
 
 ---
 

@@ -1,0 +1,25 @@
+# systemd units that must be ENABLED in the image.
+#
+# "Enabled" means there is a symlink to the unit somewhere under
+# /etc/systemd/system/*.wants/ - which is what "systemctl enable" creates
+# and what "systemctl is-enabled" reports on.
+#
+# The unit file itself is listed in manifest/required-paths.txt; this file
+# says it must also be switched on.
+#
+# Lines starting with '#' and blank lines are ignored.
+
+# --- the HDMI output ------------------------------------------------------
+# The vendor driver leaves the HDMI connector disabled and a mode set is
+# runtime state, so the mode has to be set again on every boot. The DRM
+# driver sets a mode when the console binds to the framebuffer, so this
+# unit is belt and braces - but it is what covers the case where the
+# console does not bind, and it is what the rescue path relies on.
+enable-hdmi.service
+
+# --- the services an unattended box needs --------------------------------
+# Debian's OpenSSH unit is ssh.service; sshd.service is only an alias for
+# it, and there is no symlink for the alias.
+ssh.service
+chrony.service
+systemd-networkd.service

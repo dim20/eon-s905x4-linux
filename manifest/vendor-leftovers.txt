@@ -1,0 +1,76 @@
+# What is still in the image that should not be.
+#
+# This is a RECORD, not a check. Nothing in here is enforced automatically:
+# the manifest states what is true, and this file states what is true that
+# we would rather it did not.
+#
+# Each entry says what it is, why it is still here, and what it costs.
+# When one of these is dealt with, it moves to manifest/forbidden-*.txt
+# and its entry here is deleted.
+
+## The vendor's kernel package — 83 MB of modules for a kernel we do not boot
+
+    linux-image-6.18.55-meson64
+
+**What it is.** The vendor's own kernel, and the 1327 loadable modules
+that go with it, in /lib/modules/6.18.55-meson64.
+
+**Why it is still here.** The image boots OUR kernel — 5.4.210-ga3aaaa5b0e64-dirty,
+built from the vendor tree with patches/0002 and patches/0003 applied. Those
+modules are for a different kernel, so they can never be loaded. Removing
+them means editing dpkg's database by hand, and a botched dpkg database
+breaks apt, which breaks "install a desktop with tasksel" — the thing we
+most want to work.
+
+**What it costs.** 83 MB in an 800 MB partition, and a misleading
+/lib/modules directory.
+
+**How it should be dealt with.** Not by hand. The right fix is to build the
+rootfs from a package list (mmdebstrap), where the vendor's kernel package
+is never installed in the first place. Parked — see BUILD-MANIFEST.md.
+
+## The vendor's branding — `qubian-distro`, `toilet`, `toilet-fonts`
+
+**What they are.** The vendor replaced Debian's own distribution package
+with their own, which depends on `toilet` (a figlet-based logo printer) and
+`figlet`. It also owns /etc/fstab, /etc/hosts, /root/.bashrc, the login
+banner hooks and /etc/boot-run-once.
+
+**Why they are still here.** Their *content* is mostly gone already:
+
+- the login banner hooks were replaced with ours (the vendor's printed
+  terminal escape sequences, which the framebuffer console renders as
+  literal "\e[0;91m" text on the television);
+- /root/.bashrc is empty;
+- /etc/fstab is written by the installer;
+- the stick-growing script they own is removed — see
+  manifest/forbidden-paths.txt.
+
+What remains is the packages' entries in dpkg's database and a few files
+under /etc (the networkd .network files, the cpufreq config, the
+ioschedulers rule), which are in use.
+
+**What it costs.** A handful of kilobytes, and an apt database that says
+"toilet is installed" for a program nobody runs.
+
+**How it should be dealt with.** By rebuilding the rootfs from a package
+list, the same as above.
+
+## The vendor's own kernel — we ship ours instead
+
+The vendor's `Image` is in /boot, from the kernel package above. We ship
+our own kernel on the boot partition (p1) and the installer copies it to
+the eMMC's p1. The vendor's copy in /boot is never used.
+
+**How it should be dealt with.** With the kernel package.
+
+## A note on the kernel's own modules
+
+Our kernel builds 119 loadable modules (the DVB tuners, and two Amlogic
+media modules) and we ship NONE of them — only the monolithic Image. So
+the box has no loadable modules at all, for either kernel.
+
+This matters for the WiFi question (P5c): the Realtek driver the chip
+needs is not enabled in our kernel's configuration at all
+(CONFIG_RTL8XXU and CONFIG_RTLWIFI are not set), so WiFi needs a driver
+built and enabled, not just a module file added.

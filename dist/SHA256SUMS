@@ -1,3 +1,5 @@
-404b3ff0f9dd54a58d529194467fdf99fa10d27fc2d4d34dd39ad250eec737ae  eon-s905x4-linux-stick.img.gz
-5adbc4cc53cc3633cf44a07f0d61cc2937af41ed3c717846f253526b46c52dc9  Image
-176ddf27b9e392175dbbbd057449d023c7ddd8bda68210d54c71fccf585d2043  sc2_s905x4_ah212_linux.dtb
+# v0.5-manifest
+# verify with: sha256sum -c SHA256SUMS
+7c6147cbb469cf269d5ae4cc2cfc3c383f4fee7f90111442470099369a8f9472  v0.5-manifest-img.gz
+93420f6a5f2bc6c6ade51a793c8c8ffd77562827e51bc1255538f7aee0ada8ff  Image
+d1e2267f5e945acff73f7a8973af9fcbb2d777faf26771e2a7e75687537ffda8  sc2_s905x4_ah212_linux.dtb

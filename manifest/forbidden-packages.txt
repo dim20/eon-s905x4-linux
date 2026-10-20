@@ -1,0 +1,69 @@
+# Packages the image MUST NOT contain.
+#
+# One package name per line, matched exactly against the "Package:" field
+# in the image's /var/lib/dpkg/status. Lines starting with '#' and blank
+# lines are ignored.
+#
+# The rule: NO DESKTOP, NO DISPLAY MANAGER.
+#
+# Two reasons, and both are hard requirements rather than preferences:
+#   1. The text console on the HDMI output needs the framebuffer. A
+#      display manager takes it, and the box stops being a terminal on
+#      the television.
+#   2. A desktop is roughly 450 MB of packages in an image whose whole
+#      point is to be small and to boot to a prompt in a few seconds.
+#
+# The user picks a desktop AFTER the install, with tasksel. That is why
+# tasksel and tasksel-data are in required-packages.txt.
+
+# --- display managers ----------------------------------------------------
+lightdm
+lightdm-gtk-greeter
+lightdm-gtk-greeter-settings
+gdm3
+sddm
+x-display-manager
+x-display-manager-gdm
+x-display-manager-lightdm
+x-display-manager-sddm
+
+# --- desktop environments and their task packages ------------------------
+xfce4
+xfce4-session
+xfce4-panel
+lxde
+lxde-core
+lxqt
+lxqt-session
+gnome-session
+gnome-core
+kde-plasma-desktop
+kde-standard
+mate-desktop-environment
+cinnamon
+task-xfce-desktop
+task-lxde-desktop
+task-lxqt-desktop
+task-gnome-desktop
+task-kde-desktop
+task-gnome-desktop-environment
+task-lxde-desktop-environment
+task-lxqt-desktop-environment
+task-mate-desktop-environment
+task-cinnamon-desktop-environment
+
+# --- the X server itself -------------------------------------------------
+# The X server needs a working vblank interrupt, which the vendor CRTC
+# does not deliver (see the vblank bug). It is also 20 MB of packages
+# for something the image does not use.
+xserver-xorg
+xserver-xorg-core
+xserver-xorg-input-all
+xinit
+x11-xserver-utils
+
+# The vendor's own packages - their branding, and the kernel package for
+# a kernel we do not boot - are still in the image. They are recorded,
+# with the reason and the cost, in manifest/vendor-leftovers.txt. They are
+# NOT listed here, because the manifest states what is true, and they are
+# still here.

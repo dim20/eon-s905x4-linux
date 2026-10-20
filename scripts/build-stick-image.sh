@@ -11,11 +11,11 @@
 #   total 880MB, so it fits a 1GB stick
 #
 # WHY SO SMALL WHEN THE eMMC IS 14.9GB?
-# The stick is the INSTALL SOURCE — the installer dd's p2 onto the eMMC — so
-# p2's size directly sets the install time (measured: 773MB -> 39s,
-# 7GB -> 109s). The eMMC takes all the space anyway: the installer
-# partitions it to 100% and then grows the filesystem to fill. This is the
-# same relationship an ISO has to the disk it is installed onto.
+# The stick is the INSTALL SOURCE - the installer copies the rootfs's
+# CONTENT onto the eMMC - so p2's size directly sets the install time.
+# The eMMC takes all the space anyway: the installer partitions it to 100%
+# and then grows the filesystem to fill. This is the same relationship an
+# ISO has to the disk it is installed onto.
 #
 # If you write it to a bigger stick, scripts/grow-stick.sh extends p2 into
 # the leftover space.
@@ -26,6 +26,24 @@
 #   directory at creation time, and mtools writes FAT images directly. The
 #   build therefore works on a machine where the loop module cannot be
 #   loaded, which is a common restriction in containers and VMs.
+#
+# THE IMAGE IS CHECKED AGAINST THE MANIFEST
+#   manifest/ says what the image must contain and what it must not. The
+#   build runs scripts/check-image.sh against what it has just composed,
+#   and refuses to produce an image that does not satisfy it. It also
+#   writes an inventory - every file, with its owner, mode, size and
+#   checksum - and prints the difference against the last one.
+#
+# THE BUILD DOES NOT MODIFY ITS INPUT
+#   The source tree is copied to a scratch directory first and everything
+#   happens to the copy. Building twice gives the same result as building
+#   once, and the source tree is exactly what it was.
+#
+# THE BUILD IS REPRODUCIBLE
+#   The filesystem's timestamps, its UUIDs and the gzip header are all
+#   pinned, so the same tree gives the same image, byte for byte. The
+#   image's hash is then a statement about its content rather than about
+#   when it was built.
 #
 # INPUT
 #   A prepared rootfs tree. The one shipped in the release is the live
@@ -68,10 +86,50 @@ done
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
+# ---------------------------------------------------------------- staging
+# The build works on a COPY of the source tree.
+#
+# It used to modify the tree in place: it chowned it, emptied its /run,
+# deleted its machine-id and replaced its login-message hooks. That made
+# the tree an OUTPUT that got reused as the next INPUT, so building twice
+# was not the same as building once, and there was no way to tell what the
+# tree looked like before a build. That is the shape of "one step forward,
+# two steps back".
+#
+# Copying first costs a few seconds and makes the input immutable.
+SRC_TREE="$ROOTFS_TREE"
+ROOTFS_TREE="$WORK/rootfs"
+log "staging the rootfs tree"
+log "  from: $SRC_TREE"
+log "  to:   $ROOTFS_TREE   (the source tree is never modified)"
+cp -a "$SRC_TREE" "$ROOTFS_TREE" || die "could not stage the rootfs tree"
+
+# The build time, pinned so that the same inputs give the same bytes.
+# The filesystem's timestamps are set from it, and it defaults to the
+# newest file in the tree so that nothing in the filesystem is "from the
+# future".
+: "${SOURCE_DATE_EPOCH:=$(find "$ROOTFS_TREE" -newermt '@0' -printf '%T@\n' 2>/dev/null | sort -n | tail -1 | cut -d. -f1)}"
+: "${SOURCE_DATE_EPOCH:=0}"
+export SOURCE_DATE_EPOCH
+log "  SOURCE_DATE_EPOCH = $SOURCE_DATE_EPOCH"
+
+# The filesystem UUIDs are fixed too. A random one would make every build
+# differ from every other build, and the image's hash is more useful as a
+# statement that "nothing changed" than as a statement that "it was built
+# at a different time".
+FS_UUID=${FS_UUID:-6e6f6e73-8000-4000-8000-000000000001}
+FS_HASH_SEED=${FS_HASH_SEED:-6e6f6e73-8000-4000-8000-000000000002}
+FAT_SERIAL=${FAT_SERIAL:-1a2b3c4d}
+
 # ---------------------------------------------------------------- p1: FAT
 log "building p1 (${P1_SIZE_MB}MB FAT32, flat layout)"
 truncate -s "${P1_SIZE_MB}M" "$WORK/p1.img"
-mkfs.vfat -F 32 -n BOOT "$WORK/p1.img" >/dev/null
+# --invariant: use constants for the values that would otherwise be
+# random or the current time. And mtools honours SOURCE_DATE_EPOCH, so
+# the files' timestamps are the same in every build. Without these, the
+# FAT filesystem's directory entries carry the time the image was built,
+# and two builds of the same tree differ.
+mkfs.vfat -F 32 -n BOOT -i "$FAT_SERIAL" --invariant "$WORK/p1.img" >/dev/null
 
 # The boot artefacts go at the ROOT of the boot partition. U-Boot's fatload
 # reads only FAT, so this partition must be FAT; the eMMC's must be ext4.
@@ -103,9 +161,13 @@ truncate -s "${P2_SIZE_MB}M" "$WORK/p2.img"
 # filesystem is writable by the wrong uid. Fix the ownership before the
 # image is built, rather than discovering it later.
 #
+# This runs on the STAGED COPY, so the source tree keeps whatever
+# ownership it has.
+#
 # If the tree is ALREADY root-owned, chown will fail for a non-root user
-# even though there is nothing to fix — so check first, and only chown
+# even though there is nothing to fix - so check first, and only chown
 # when there is actually something to change.
+#
 # NB: `find` exits non-zero when it cannot descend into a mode-0700
 # directory, which under `set -e` would kill the script. Force the exit
 # status to zero and handle the output instead.
@@ -125,11 +187,18 @@ fi
 if [ -n "$NOT_ROOT" ]; then
     if [ "$(id -u)" -ne 0 ]; then
         die "the rootfs tree contains files not owned by root (e.g. $NOT_ROOT).
-  They came from an unprivileged copy. Fix them before building:
-      sudo chown -R 0:0 $ROOTFS_TREE
-  or run this script as root."
+  They came from an unprivileged copy, and the image must be owned by root.
+
+  Run the build inside a user namespace, where you are root without
+  needing to be:
+
+      unshare -r scripts/build-stick-image.sh <tree> <out>
+
+  or fix the tree first:
+
+      sudo chown -R 0:0 <tree>"
     fi
-    log "  fixing ownership (some files are not root-owned)"
+    log "  fixing ownership of the staged tree (some files are not root-owned)"
     chown -R 0:0 "$ROOTFS_TREE" || die "chown failed"
     log "  ownership fixed"
 else
@@ -273,6 +342,40 @@ if [ -d "$HERE/overrides" ]; then
     done
 fi
 
+# ------------------------------------------------- the vendor's leftovers
+# The image is built from the vendor's rootfs, so it inherits the vendor's
+# assumptions. Some of them are hazards rather than features, and the
+# manifest says they must not be in the image.
+#
+# This is the big one: /etc/boot-run-once/early/01-resize-rootfs grows the
+# root filesystem to fill its device, on every boot. On the stick that
+# rewrites the partition table, so the stick stops being the image we
+# published, and the install source becomes "the whole stick" rather than
+# 800 MB - which is why the installer has to copy the rootfs CONTENT
+# rather than the partition. On the eMMC it repartitions the flash on every
+# boot.
+#
+# We grow the stick on purpose, with scripts/grow-stick.sh, and the
+# installer grows the eMMC's filesystem itself.
+for f in "$ROOTFS_TREE"/etc/boot-run-once/early/*resize*; do
+    [ -e "$f" ] || continue
+    rm -f "$f"
+    log "  removed the vendor's stick-growing script: ${f#$ROOTFS_TREE}"
+done
+rmdir "$ROOTFS_TREE"/etc/boot-run-once/early 2>/dev/null || true
+
+# ------------------------------------------------- enable our own units
+# A unit file that is not enabled never runs. enable-hdmi.service
+# programs the HDMI output at boot - the vendor driver leaves the
+# connector disabled, and a mode set is runtime state, so it has to be
+# done on every boot.
+WANTS="$ROOTFS_TREE/etc/systemd/system/multi-user.target.wants"
+mkdir -p "$WANTS"
+if [ -f "$ROOTFS_TREE/etc/systemd/system/enable-hdmi.service" ]; then
+    ln -sf /etc/systemd/system/enable-hdmi.service "$WANTS/enable-hdmi.service"
+    log "  enabled enable-hdmi.service"
+fi
+
 # ---------------------------------------------------------------- the tools
 # The image ships scripts that use other programs, and a script that fails
 # at boot is a silent failure: the service just says "failed" in the
@@ -324,7 +427,14 @@ done
 # mke2fs -d populates the filesystem from the directory at creation time.
 # No mount and no loop device, which is what makes this buildable on a
 # machine where the loop module cannot be loaded.
-mke2fs -q -F -t ext4 -L ROOTFS -d "$ROOTFS_TREE" "$WORK/p2.img" || die "mke2fs failed"
+#
+# The UUID and the hash seed are fixed, and the timestamps come from
+# SOURCE_DATE_EPOCH, so the same tree gives the same filesystem, byte for
+# byte. E2FSPROGS_FAKE_TIME is what makes the superblock's timestamps
+# reproducible.
+E2FSPROGS_FAKE_TIME="$SOURCE_DATE_EPOCH" \
+mke2fs -q -F -t ext4 -L ROOTFS -U "$FS_UUID" -E hash_seed="$FS_HASH_SEED" \
+       -d "$ROOTFS_TREE" "$WORK/p2.img" || die "mke2fs failed"
 
 # Check the SOURCE before trusting the result. mke2fs -d does not complain
 # about an empty or truncated directory: it builds a filesystem containing
@@ -360,6 +470,39 @@ else
     diff -r --no-dereference '$ROOTFS_TREE' '$WORK/verify'"
 fi
 
+# The ownership inside the filesystem, read out of the image itself rather
+# than from the tree it was built from. mke2fs -d copies the ownership,
+# but "it should have" is not "it did".
+for p in /bin/bash /etc/shadow /etc/passwd; do
+    own=$(debugfs -R "stat $p" "$WORK/p2.img" 2>/dev/null \
+          | sed -n 's/.*User: *\([0-9]*\) *Group: *\([0-9]*\).*/\1:\2/p')
+    if [ -z "$own" ]; then
+        log "  WARNING: could not read the ownership of $p out of the image"
+    elif [ "$own" != "0:0" ]; then
+        die "the file $p is owned by $own inside the image; it must be 0:0"
+    fi
+done
+log "  the files inside the image are owned by root"
+
+# Now check the image against the manifest: the rules, as data, about what
+# the image must and must not contain. The checks above are about the copy
+# being faithful; these are about the image being RIGHT.
+log "checking the image against the manifest"
+"$HERE/check-image.sh" --rootfs "$ROOTFS_TREE" --p1 "$WORK/p1.img" \
+    || die "the image does not satisfy the manifest (see the failures above)"
+
+# And write down what is in it, so that the next build can say what
+# changed. The inventory is the record: it is what "which files must
+# remain in the image" means, written out.
+INVENTORY_OUT="$(dirname "$OUT")/inventory.txt"
+"$HERE/inventory.sh" --rootfs "$ROOTFS_TREE" --out "$INVENTORY_OUT" --quiet
+if [ -f "${INVENTORY_BASELINE:-$REPO/manifest/inventory.txt}" ]; then
+    "$HERE/inventory.sh" --rootfs "$ROOTFS_TREE" \
+        --diff "${INVENTORY_BASELINE:-$REPO/manifest/inventory.txt}" || true
+else
+    log "  (no baseline inventory yet - $INVENTORY_OUT is the first record)"
+fi
+
 # ---------------------------------------------------------------- assemble
 log "assembling the ${IMG_MB}MB image"
 truncate -s "${IMG_MB}M" "$WORK/stick.img"
@@ -374,13 +517,24 @@ unit: sectors
 start=$P1_START, size=$P1_SECTORS, type=c, bootable
 start=$P2_START, size=$P2_SECTORS, type=83
 EOF
+
+# sfdisk gives the disk a RANDOM identifier, which it writes into the MBR
+# at offset 440. It was the first reason two builds of the same tree came
+# out different. It is set from the kernel's checksum instead: stable for
+# a given kernel, different for a different one.
+DISK_ID="0x$(sha256sum "$KERNEL" | cut -c1-8)"
+sfdisk --no-reread --disk-id "$WORK/stick.img" "$DISK_ID" >/dev/null
+log "disk identifier: $DISK_ID (derived from the kernel's checksum)"
 log "partition table:"
 sfdisk -l "$WORK/stick.img" | sed 's/^/  /'
 
 # ---------------------------------------------------------------- compress
 mkdir -p "$(dirname "$OUT")"
 log "compressing to $OUT"
-gzip -9 -c "$WORK/stick.img" > "$OUT"
+# -n: do not store the file name or the modification time in the gzip
+# header. Without it, two builds of the same tree give two different
+# hashes, and the image's hash stops being a statement about its content.
+gzip -9 -n -c "$WORK/stick.img" > "$OUT"
 
 log "done."
 ls -la "$OUT" | sed 's/^/  /'

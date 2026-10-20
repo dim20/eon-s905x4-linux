@@ -1,0 +1,73 @@
+# Packages the image MUST contain.
+#
+# One package name per line. Lines starting with '#' and blank lines are
+# ignored. The name must match the "Package:" field in the image's
+# /var/lib/dpkg/status exactly.
+#
+# Why this file exists: the requirements used to live as scattered `if`
+# statements inside the build script, and they were checked against the
+# INPUT tree rather than against the shipped bytes. A defect that only
+# appeared during assembly would have passed. These are the requirements,
+# as data, checked against the image we actually ship.
+#
+# See scripts/check-image.sh.
+
+# --- the system itself ---------------------------------------------------
+systemd
+systemd-sysv
+systemd-resolved
+init
+init-system-helpers
+dbus
+dbus-system-bus-common
+udev
+util-linux
+coreutils
+bash
+dash
+
+# --- the login console on the television ----------------------------------
+# The HDMI output is programmed at boot by enable-hdmi.sh, which needs
+# modetest from libdrm-tests. Without it the television stays black.
+libdrm-tests
+libdrm2
+libdrm-common
+
+# --- the services the box needs to be useful unattended ------------------
+openssh-server
+openssh-client
+ca-certificates
+chrony
+curl
+netbase
+iproute2
+isc-dhcp-client
+bind9-dnsutils
+bind9-host
+
+# --- the first-boot setup wizard (P9) needs these ------------------------
+# debconf and whiptail drive the setup screen; dialog and ncurses-bin are
+# whiptail's backends. The wizard is not implemented yet, but the
+# mechanism is Debian's own and these are its parts.
+debconf
+whiptail
+dialog
+ncurses-bin
+console-setup
+passwd
+adduser
+
+# --- the desktop is the user's choice, made afterwards --------------------
+# tasksel is what makes that choice possible. tasksel-data is what makes
+# tasksel OFFER anything: without it the task list is empty and the
+# command does nothing at all.
+tasksel
+tasksel-data
+
+# --- the installer needs these ------------------------------------------
+# The installer copies the rootfs with rsync, preserving ownership, hard
+# links, extended attributes and ACLs.
+rsync
+acl
+libattr1
+util-linux

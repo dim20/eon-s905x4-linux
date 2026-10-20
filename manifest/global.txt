@@ -1,0 +1,27 @@
+# Rules that apply to the whole rootfs, not to one path.
+#
+# Format: key = value, one per line. Lines starting with '#' and blank
+# lines are ignored. An unknown key is an ERROR, not a warning - a rule
+# that is silently ignored is worse than no rule, because it looks like
+# protection.
+
+# Every file in the image must be owned by root:root.
+#
+# The v0.3 image's files were owned by uid 1000 - every binary, every
+# config file, /etc/shadow included. It worked, because no account has
+# uid 1000, but a file owned by an unprivileged uid is not a system file,
+# and the failures it causes look like nothing to do with ownership:
+# sshd refuses to start because /run/sshd is not root-owned.
+rootfs-owner = 0:0
+
+# Every installed package must have its file list in the dpkg database.
+#
+# The vendor's image ships a STRIPPED dpkg database: 134 of its 271
+# packages have no /var/lib/dpkg/info/<package>.list. The files are
+# present, so the system works, but dpkg does not know the package owns
+# them: "dpkg -L" prints nothing, "dpkg -S" cannot find the owner, and
+# dpkg prints "files list file for package X missing; assuming package has
+# no files currently installed" whenever it is asked about one.
+#
+# This is checked because it is invisible in every other way.
+package-file-lists = required

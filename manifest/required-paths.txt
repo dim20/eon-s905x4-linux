@@ -1,0 +1,70 @@
+# Paths that MUST exist in the image.
+#
+# Format, one per line:
+#
+#     <path> [<mode>] [<owner>]
+#
+#   path   absolute, as it appears in the image
+#   mode   the required mode, octal, e.g. 0755. Optional.
+#   owner  the required owner, as <user>:<group> or <uid>:<gid>. Optional.
+#
+# Lines starting with '#' and blank lines are ignored. A path that does
+# not exist is a failure; a path with the wrong mode or owner is a
+# failure. See scripts/check-image.sh.
+
+# --- the scripts the image ships, in /root -------------------------------
+# These are how the box is set up and recovered. They must be executable:
+# the operator types their names.
+/root/install-to-emmc.sh 0755
+/root/rescue-init.sh 0755
+/root/enable-hdmi.sh 0755
+/root/find-env.sh 0755
+/root/prepare-stick.sh 0755
+/root/grow-stick.sh 0755
+
+# --- the units the image needs -------------------------------------------
+# enable-hdmi.service programs the HDMI output at boot. The vendor driver
+# leaves the connector disabled and a mode set is runtime state, so it has
+# to be done on every boot. It also must be ENABLED - see
+# manifest/required-units.txt.
+/etc/systemd/system/enable-hdmi.service 0644
+# chrony-wait.service cannot set up a user namespace on this kernel
+# (CONFIG_USER_NS is unset), so it fails and leaves the system "degraded"
+# with one failed unit even though everything works. The drop-in disables
+# PrivateUsers for that unit.
+/etc/systemd/system/chrony-wait.service.d/10-no-private-users.conf 0644
+
+# --- our login banner ----------------------------------------------------
+# The vendor replaced Debian's login-message hooks with their own, by
+# symlinking /etc/update-motd.d/<name> to /usr/lib/qubian/update-motd.d/
+# <name>. Their hooks print terminal escape sequences and Amlogic branding,
+# and the framebuffer console on the HDMI output is not a terminal
+# emulator: it rendered them as literal "\e[0;91m" text on the television.
+# These are ours, and they are plain text.
+/etc/update-motd.d/01-quban-header 0755
+/etc/update-motd.d/15-qubian-system-state 0755
+
+# --- the programs the image's own scripts and services need --------------
+/usr/bin/rsync 0755
+/usr/bin/modetest 0755
+/usr/bin/tasksel 0755
+/usr/bin/whiptail 0755
+/usr/bin/dialog 0755
+/usr/bin/debconf 0755
+/usr/bin/fw_setenv 0755
+/usr/bin/fw_printenv 0755
+/usr/sbin/sshd 0755
+/usr/sbin/chronyd 0755
+/usr/bin/curl 0755
+
+# --- the mount points the init mounts onto -------------------------------
+# The kernel initialises devtmpfs but does not mount it
+# (CONFIG_DEVTMPFS_MOUNT is not set), so the rootfs must contain the
+# directories the init mounts onto. A rootfs with no /dev boots and then
+# dies at the login prompt with "cannot create /dev/null: Directory
+# nonexistent" - every command that redirects output fails.
+/dev 0755
+/proc 0755
+/sys 0755
+/run 0755
+/tmp 1777

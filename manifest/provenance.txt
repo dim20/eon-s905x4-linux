@@ -1,0 +1,87 @@
+# Where the rootfs came from.
+#
+# The rootfs tree is NOT in git - it is 670 MB of a vendor's Debian
+# system. This file says what it is and what was done to it, so that it
+# can be rebuilt if it is lost, and so that anybody reading the image can
+# tell what is the vendor's and what is ours.
+#
+# The tree lives at build/stick/p2build in the private working repository.
+
+## 1. The source
+
+    dl/devmfc-trixie.img
+    401f2587d8c6d5970743e4947181d638b746f99916443392ebb050d049698d8e
+    1097859072 bytes
+
+The vendor's own USB stick image for this box: a Debian trixie arm64
+system, with the vendor's own kernel (6.18.55-meson64), the vendor's
+bootloader scripts, their branding and their services.
+
+## 2. The extraction
+
+The rootfs is the image's second partition, extracted with debugfs (no
+loop device, no mount, nothing written to the vendor's image):
+
+    debugfs -R "rdump /p2 <tree>" dl/devmfc-trixie.img
+
+The extraction is lossy in two ways, both of which are fixed later:
+
+  * the files come out owned by the extracting user, not by root;
+  * a handful of files with restrictive modes are skipped by debugfs.
+
+The extracted tree is also kept as a tarball, build/stick/p2root.tar, so
+the extraction does not have to be repeated.
+
+## 3. What we changed on top
+
+### 3.1 Packages added
+
+Harvested from the box with scripts/harvest-pkg.sh, which installs the
+package there, copies the files it owns, and merges dpkg's record of it
+into the tree:
+
+    rsync            (the installer copies the rootfs with it)
+    acl              (rsync's --acls)
+    tasksel          (so the user can pick a desktop afterwards)
+    tasksel-data     (so tasksel OFFERS anything)
+    libdrm-tests     (modetest, which enable-hdmi.sh needs)
+      and its dependencies: libdrm2, libdrm-common, libdrm-amdgpu1,
+      libdrm-etnaviv1, libdrm-tegra0
+
+### 3.2 Files installed by the build
+
+The build installs these itself, so a rebuild from a plain tree is
+complete rather than depending on the tree having been prepared:
+
+    /root/install-to-emmc.sh   /root/rescue-init.sh
+    /root/enable-hdmi.sh       /root/find-env.sh
+    /root/prepare-stick.sh     /root/grow-stick.sh
+
+### 3.3 Overrides
+
+    scripts/overrides/motd/                     our login banner, replacing
+                                               the vendor's
+    scripts/overrides/chrony-wait.service.d/    a drop-in, because
+                                               CONFIG_USER_NS is unset
+    scripts/overrides/enable-hdmi.service      programs the HDMI output
+
+### 3.4 Done by the build, to the staged copy
+
+The build works on a COPY of the tree (see build-stick-image.sh), and on
+that copy it:
+
+    fixes the ownership to root:root
+    empties /run
+    removes /etc/machine-id
+    removes the vendor's login-message hooks and installs ours
+    removes the vendor's stick-growing script
+    enables enable-hdmi.service
+
+The source tree is not modified by any of this. That is deliberate: a
+build that modifies its input cannot be built twice and get the same
+thing, and the tree would drift into "whatever we last built from".
+
+## 4. What is still the vendor's
+
+See manifest/vendor-leftovers.txt - the vendor's branding packages and
+their kernel package, which are still in the image.
