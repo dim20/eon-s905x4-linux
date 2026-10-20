@@ -35,7 +35,10 @@ P2_START=180224
 
 # Expected hashes for the boot artefacts. Override with env vars if you have
 # rebuilt the kernel; set VERIFY_SKIP=1 to bypass (not recommended).
-EXPECT_IMAGE=${EXPECT_IMAGE:-5adbc4cc53cc3633cf44a07f0d61cc2937af41ed3c717846f253526b46c52dc9}
+#
+# These are the hashes of the kernel and DTB that kernel/SHA256SUMS lists,
+# so the installer and the release agree about what is in the image.
+EXPECT_IMAGE=${EXPECT_IMAGE:-93420f6a5f2bc6c6ade51a793c8c8ffd77562827e51bc1255538f7aee0ada8ff}
 EXPECT_DTB=${EXPECT_DTB:-d1e2267f5e945acff73f7a8973af9fcbb2d777faf26771e2a7e75687537ffda8}
 KERNEL_NAME=${KERNEL_NAME:-Image}
 DTB_NAME=${DTB_NAME:-sc2_s905x4_ah212_linux.dtb}
