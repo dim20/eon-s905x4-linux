@@ -8,8 +8,12 @@
 # Design rules this script follows, each of which exists because of a real
 # failure on this hardware:
 #
-#   1. The rootfs is dd'd while UNMOUNTED. Writing raw blocks under a live ext4
-#      mount corrupts the filesystem.
+#   1. The rootfs is copied by CONTENT through the filesystem, never by
+#      writing raw blocks under a live ext4 mount - that corrupts the
+#      filesystem. And it is copied as files rather than as blocks, because
+#      the box grows the USB stick to fill the device at every boot, so the
+#      source partition is as big as the stick while the rootfs inside it is
+#      not.
 #   2. The boot partition is ext4, and the bootcmd uses ext4load. Do not use
 #      FAT32 here: a FAT filesystem whose geometry disagrees with its partition
 #      silently truncates writes, which produced a corrupt kernel that booted to
@@ -47,6 +51,9 @@ log()  { printf '[install] %s\n' "$*"; }
 die()  { printf '[install] ERROR: %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "must run as root"
+command -v rsync >/dev/null 2>&1 || die "rsync is not installed.
+  It is used to copy the rootfs onto the eMMC, and it is part of the image.
+  If it is missing the image was built wrong."
 for d in "$MMC" "$USB_BOOT" "$USB_ROOT"; do
     [ -b "$d" ] || die "$d not found"
 done
@@ -238,17 +245,97 @@ log "formatting $P2 (ext4, label ROOTFS)"
 mkfs.ext4 -F -q -L ROOTFS "$P2"
 
 # ---------------------------------------------------------------- rootfs
-# dd with the target UNMOUNTED. This is the whole point of rule 1.
-log "copying rootfs from $USB_ROOT to $P2 (unmounted) — this takes a minute"
-dd if="$USB_ROOT" of="$P2" bs=4M conv=fsync status=progress
+# The rootfs is copied by CONTENT, not by blocks.
+#
+# WHY NOT dd THE SOURCE PARTITION:
+#
+# The box grows the USB stick at every boot: the vendor's USB-disk flow
+# rewrites the stick's partition table and grows the filesystem to fill the
+# device. So the source partition is as big as the stick - 7.7 GB on a 7.2 GB
+# stick - while the rootfs inside it is 640 MB. A block copy would copy 7 GB
+# of zeros, over USB, for every install, and the time scales with the size
+# of the stick rather than with the size of the system.
+#
+# What actually has to move is the rootfs. The target filesystem is already
+# the right size - the partition spans the whole eMMC and mkfs made a
+# filesystem that fills it - so only the content has to go across: 640 MB
+# whatever the stick is.
+#
+# The copy goes through the filesystems' own metadata, so it is the same
+# kind of read and write a normal file copy does, and it works with the
+# source mounted.
+#
+# Two things are deliberately left out, because the IMAGE does not have them
+# and every box must have its own:
+#   /etc/machine-id        - the machine identity; systemd generates one
+#   /etc/ssh/ssh_host_*    - the SSH host keys; sshd generates them
+SRCROOT=/mnt/usb_root
+DSTROOT=/mnt/emmc_root
+
+# If the script dies part-way through - and it has died part-way through
+# before - the two filesystems stay mounted and the next run cannot mount
+# them again, and the target is left half-written. Clean up on the way out.
+cleanup() {
+    mountpoint -q "$SRCROOT" && umount "$SRCROOT" 2>/dev/null || true
+    mountpoint -q "$DSTROOT" && umount "$DSTROOT" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+log "copying the rootfs content from $USB_ROOT to $P2"
+mkdir -p "$SRCROOT" "$DSTROOT"
+mount "$USB_ROOT" "$SRCROOT" || die "cannot mount $USB_ROOT"
+mount "$P2" "$DSTROOT" || die "cannot mount $P2"
+rsync -aH --numeric-ids --xattrs --acls --one-file-system \
+      --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp \
+      --exclude=/etc/machine-id --exclude='/etc/ssh/ssh_host_*_key' \
+      "$SRCROOT/" "$DSTROOT/"
+rc=$?
+# These must not be allowed to abort the script: a umount that fails for a
+# trivial reason (the directory is busy for a moment, say) would otherwise
+# kill the install halfway and leave the eMMC half-written, which is exactly
+# what happened once already.
+umount "$SRCROOT" 2>/dev/null || true
+umount "$DSTROOT" 2>/dev/null || true
+rmdir "$SRCROOT" "$DSTROOT" 2>/dev/null || true
+[ "$rc" -eq 0 ] || die "rsync failed (exit $rc) — the eMMC rootfs is incomplete.
+  Do not trust this box until the copy has been redone."
 sync
 
+# A cheap sanity check on top of rsync's exit code: the two trees must hold
+# the same number of files. rsync returning 0 means it finished; this catches
+# "it finished but not all of it arrived".
+#
+# It must never be able to abort the install, so every step of it is
+# individually tolerant of failure: a mount that does not happen, a find that
+# trips over a file that moved, an umount that finds the mount point busy.
+# (It has already killed the install twice.)
+file_count() {
+    local n=0
+    local mnt=/mnt/fc_$$
+    mkdir -p "$mnt" 2>/dev/null || true
+    if mount "$1" "$mnt" 2>/dev/null; then
+        n=$(find "$mnt" -xdev -type f 2>/dev/null | wc -l) || n=0
+        umount "$mnt" 2>/dev/null || true
+        rmdir "$mnt" 2>/dev/null || true
+    fi
+    echo "${n:-0}"
+}
+SRC_N=$(file_count "$USB_ROOT")
+DST_N=$(file_count "$P2")
+log "  files: source ${SRC_N:-?}, target ${DST_N:-?}"
+if [ -n "${SRC_N:-}" ] && [ -n "${DST_N:-}" ] && [ "$SRC_N" != "$DST_N" ]; then
+    log "  WARNING: the source and the target hold different numbers of files."
+    log "  The difference is expected to be small (the machine-id and the SSH"
+    log "  host keys are deliberately not copied, and the live system writes"
+    log "  logs), but check the system before relying on it."
+fi
+
 # ---------------------------------------------------------------- grow to fill
-# The dd above copies the SOURCE partition's bytes (about 773 MiB from a stock
-# stick) and stops. The ext4 filesystem therefore stays that size even though P2
-# spans the whole 14.9 GB eMMC — the user would boot into a ~5%-full root
-# filesystem with the remaining ~13 GB sitting unallocated. That is not obvious
-# from df and looks like a hardware fault.
+# The filesystem was created with mkfs over the whole partition, so it
+# already fills it and this is a no-op. It is kept as a safety net: if the
+# filesystem somehow ended up smaller than the partition, the user would
+# boot into a ~5%-full root filesystem with the remaining ~13 GB sitting
+# unallocated. That is not obvious from df and looks like a hardware fault.
 #
 # grow the filesystem to fill the (already correctly sized) partition. Offline,
 # so the device must be unmounted.
