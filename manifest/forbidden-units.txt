@@ -1,11 +1,15 @@
 # systemd units that must NOT be enabled in the image.
 #
-# The mirror image of manifest/required-units.txt: a unit listed here has
-# no business being switched on.
-#
 # "Enabled" means there is a symlink to the unit somewhere under
 # /etc/systemd/system/*.wants/ - which is what "systemctl enable" creates
 # and what "systemctl is-enabled" reports on.
+#
+# NOTE: not being enabled is not the same as being masked, and it does not
+# survive a reboot on its own - Debian's preset policy puts a unit back
+# if it has a SysV init script. For the units below, the image MASKS
+# them (see manifest/masked-units.txt), which is the stronger statement
+# and the one that holds. This list is here so that the two cannot drift
+# apart.
 #
 # Lines starting with '#' and blank lines are ignored.
 

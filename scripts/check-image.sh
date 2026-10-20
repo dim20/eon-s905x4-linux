@@ -194,6 +194,24 @@ check_forbidden_units() {
     done < <(entries "$MANIFEST/forbidden-units.txt")
 }
 
+# ---------------------------------------------------------------- masking
+# A masked unit is a symlink to /dev/null in /etc/systemd/system.
+# It cannot be started, and the preset policy ignores it.
+check_masked_units() {
+    local unit link
+    while read -r unit; do
+        [ -n "$unit" ] || continue
+        link="$ROOTFS/etc/systemd/system/$unit"
+        if [ -L "$link" ] && [ "$(readlink "$link")" = "/dev/null" ]; then
+            ok
+        elif [ -e "$link" ] || [ -L "$link" ]; then
+            fail "the unit '$unit' must be MASKED (a symlink to /dev/null), but it is not"
+        else
+            fail "the unit '$unit' must be MASKED, but there is nothing at $link"
+        fi
+    done < <(entries "$MANIFEST/masked-units.txt")
+}
+
 # ---------------------------------------------------------------- global
 check_global() {
     local line key value p missing names n bad
@@ -298,6 +316,7 @@ check_required_paths
 check_forbidden_paths
 [ -f "$MANIFEST/required-units.txt" ] && check_units
 [ -f "$MANIFEST/forbidden-units.txt" ] && check_forbidden_units
+[ -f "$MANIFEST/masked-units.txt" ] && check_masked_units
 [ -f "$MANIFEST/global.txt" ] && check_global
 check_p1
 

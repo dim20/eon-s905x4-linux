@@ -1,0 +1,41 @@
+# systemd units that must be MASKED in the image.
+#
+# A masked unit is a symlink to /dev/null in /etc/systemd/system. It
+# cannot be started, and systemd's preset policy ignores it - which is
+# the point.
+#
+# WHY MASKING, AND NOT JUST "NOT ENABLING"
+#
+# Debian's preset policy (/usr/lib/systemd/system-preset/50-debian-
+# systemd.preset) enables every unit that has a SysV init script, and
+# systemd applies that policy at every boot. So a unit that is merely
+# "not enabled" in the image comes BACK at the next boot, and it comes
+# back silently.
+#
+# That is not a theory: chronyd-restricted.service, chrony-wait.service
+# and rsync.service all reappeared on the box after they had been
+# removed from the image, and `systemctl preset-all` recreated all three
+# of them on demand.
+#
+# A mask is the systemd-native way to say "this unit must not run", and
+# it survives every boot.
+#
+# Lines starting with '#' and blank lines are ignored.
+
+# The vendor's second NTP daemon. It takes port 323 from chrony.service,
+# which is the one the manifest requires, and chrony.service then sits
+# there "inactive (dead)" - enabled, present, and not running.
+chronyd-restricted.service
+
+# It ran the scripts in /etc/boot-run-once/early - which was the
+# vendor's stick-growing script and nothing else. Its post-step is
+# "chmod -x /etc/boot-run-once/early/*", which fails when that
+# directory is gone, and the unit fails with it: a failed unit at every
+# boot.
+boot-run-once-early.service
+
+# The rsync DAEMON. We ship rsync as a command, not as a server. It
+# never starts (it wants /etc/rsyncd.conf), but "enabled and not
+# running" is exactly the state we are trying to get rid of. Unmask it
+# if you want the daemon.
+rsync.service

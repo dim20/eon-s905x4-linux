@@ -120,6 +120,8 @@ log "  SOURCE_DATE_EPOCH = $SOURCE_DATE_EPOCH"
 FS_UUID=${FS_UUID:-6e6f6e73-8000-4000-8000-000000000001}
 FS_HASH_SEED=${FS_HASH_SEED:-6e6f6e73-8000-4000-8000-000000000002}
 FAT_SERIAL=${FAT_SERIAL:-1a2b3c4d}
+# The form a FAT volume serial takes in an fstab: 1A2B-3C4D
+FAT_UUID=$(printf '%s' "$FAT_SERIAL" | sed -E 's/^(..)(..)(....)$/\1\2-\3/' | tr 'a-f' 'A-F')
 
 # ---------------------------------------------------------------- p1: FAT
 log "building p1 (${P1_SIZE_MB}MB FAT32, flat layout)"
@@ -395,28 +397,55 @@ done
 # service is the one the manifest requires, and it is the one with the
 # RuntimeDirectory, so it is the one to keep.
 #
-# The interesting part is HOW the vendor's unit gets enabled. It is not
-# a symlink in the image at all: /var/lib/systemd/deb-systemd-helper-
-# enabled/chronyd-restricted.service.dsh-also contains the path of the
-# symlink to create, and deb-systemd-helper - which systemd runs as a
-# generator, at every boot - creates it. So the unit reappears on every
-# boot no matter what the image says.
+# THE PART THAT MATTERS: removing the symlink does not help, because
+# Debian's preset policy puts it back. /usr/lib/systemd/system-preset/
+# 50-debian-systemd.preset enables every unit that has a SysV init
+# script, and systemd applies that policy at every boot - so
+# chronyd-restricted.service, chrony-wait.service and rsync.service all
+# reappear, whatever the image says.
 #
-# Verified on the box: with chronyd-restricted disabled, chrony.service
+# The systemd-native way to say "no" is to MASK a unit: a symlink to
+# /dev/null. A masked unit is ignored by the preset policy ("Unit ... is
+# masked, ignoring") and cannot be started.
+#
+# Verified on the box: with chronyd-restricted masked, chrony.service
 # starts, selects a source and reports "Leap status: Normal".
 for u in chronyd-restricted.service; do
-    for d in "$ROOTFS_TREE"/etc/systemd/system/*.wants; do
-        [ -d "$d" ] || continue
-        if [ -e "$d/$u" ] || [ -L "$d/$u" ]; then
-            rm -f "$d/$u"
-            log "  disabled $u (it duplicated chrony.service and lost the port)"
-        fi
-    done
     for m in "$ROOTFS_TREE"/var/lib/systemd/deb-systemd-helper-enabled/"$u".dsh-also; do
         [ -e "$m" ] || continue
         rm -f "$m"
         log "  removed the deb-systemd-helper marker that re-enabled $u at every boot"
     done
+done
+
+# ---------------------------------------------------------------- masking
+# A masked unit cannot be started, and the preset policy ignores it.
+# This is how you say "this unit must not run" in a way that survives
+# every boot.
+#
+#   chronyd-restricted.service  the vendor's second NTP daemon. It takes
+#                               port 323 from chrony.service, which is the
+#                               one the manifest requires.
+#   boot-run-once-early.service it runs the scripts in
+#                               /etc/boot-run-once/early - which was the
+#                               vendor's stick-growing script and nothing
+#                               else - and its post-step fails when that
+#                               directory is gone, which fails the unit.
+#   rsync.service              the rsync DAEMON. We ship rsync as a
+#                               command, not as a server, and the preset
+#                               policy enables the unit because the
+#                               package ships a SysV init script. It
+#                               never starts (it wants
+#                               /etc/rsyncd.conf), but "enabled and not
+#                               running" is exactly the state we are
+#                               trying to get rid of. Unmask it if you
+#                               want the daemon.
+for u in chronyd-restricted.service boot-run-once-early.service rsync.service; do
+    dest="$ROOTFS_TREE/etc/systemd/system/$u"
+    mkdir -p "$(dirname "$dest")"
+    rm -f "$dest"
+    ln -s /dev/null "$dest"
+    log "  masked $u"
 done
 
 # ------------------------------------------------- enable our own units
@@ -430,6 +459,27 @@ if [ -f "$ROOTFS_TREE/etc/systemd/system/enable-hdmi.service" ]; then
     ln -sf /etc/systemd/system/enable-hdmi.service "$WANTS/enable-hdmi.service"
     log "  enabled enable-hdmi.service"
 fi
+
+# ---------------------------------------------------------------- the fstab
+# The image is built with a FIXED filesystem UUID, so the fstab can be
+# written here rather than inherited from the tree.
+#
+# The tree's fstab names the root filesystem by the UUID it had when the
+# tree was made - which is not this image's UUID. The result is that
+# systemd-remount-fs.service cannot find it and FAILS at every boot, and
+# the root filesystem is left with the kernel's default mount options
+# instead of the ones in the fstab.
+#
+# The /boot entry names the FAT partition by the volume serial, which is
+# fixed for the same reason.
+log "writing the fstab"
+cat > "$ROOTFS_TREE/etc/fstab" <<EOF
+# <file system> <mount point> <type> <options> <dump> <pass>
+UUID=$FS_UUID   /      ext4  defaults,noatime,nodiratime,commit=180,errors=remount-ro  0  1
+UUID=$FAT_UUID  /boot  vfat  nosuid,nodev,noexec,nofail  0  2
+proc        /proc   proc  defaults                 0  0
+tmpfs       /tmp    tmpfs defaults,nosuid,nodev    0  0
+EOF
 
 # ---------------------------------------------------------------- the tools
 # The image ships scripts that use other programs, and a script that fails
