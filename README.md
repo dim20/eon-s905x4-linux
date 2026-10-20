@@ -26,6 +26,7 @@ box. Not yet validated on other hardware.
 | 4 cores | ✅ |
 | Ethernet 100 Mbps | ✅ internal RMII PHY |
 | HDMI | ✅ **1920×1080 output confirmed on a real display** |
+| Text console on HDMI | ✅ **a login prompt on the TV, confirmed on a real display** |
 | Audio | ASoC card + SPDIF register — **never confirmed audible** |
 | USB 2.0 / 3.0 | ✅ |
 | Bluetooth | present |
@@ -55,6 +56,12 @@ networking and SSH, and gives you a login (`root` / `tvbox`):
 ssh root@<the address the box says on the serial console>
 ```
 
+**There is also a login prompt on the TV.** Plug a display into the HDMI
+output and the box gives you a text terminal on it — you do not need SSH,
+a serial cable, or any other way in. The terminal is a normal Linux
+console: `root` and `tvbox` to log in, `passwd` to change the password,
+and `Ctrl-Alt-F1`/`Ctrl-Alt-F2` to move between terminals.
+
 From there, provision the eMMC:
 
 ```sh
@@ -75,12 +82,10 @@ These are real and will bite you:
 1. **Audio has never been confirmed audible.** The ASoC card registers and
    the HDMI transmitter reports a valid audio format, but nobody has heard
    a speaker.
-2. **There is no desktop on the image, and no text console on the TV.** The
-   image is deliberately headless so it stays small enough to fit a 1 GB
-   stick and boots in about 7 seconds. The display output itself works — the
-   connector goes live at 1920×1080 — but the kernel has no framebuffer
-   console, so a text terminal cannot be rendered on the HDMI output. You get
-   a **serial console and SSH**.
+2. **There is no desktop on the image.** The image is deliberately headless
+   so it stays small enough to fit a 1 GB stick and boots in about 7
+   seconds. There **is** a text console on the HDMI output — see the quick
+   start above — but no graphical desktop.
 
    **Neither XFCE nor LightDM is part of the image, and neither is any other
    desktop or display manager.** That is deliberate, and the image build
@@ -100,19 +105,24 @@ These are real and will bite you:
    DRM directly, and the greeter is verified on a real display. The desktop
    is not part of the image, so it is not part of what we tested — but the
    display path underneath it is.
-3. **The first paint is slow, and the kernel logs warnings.** Xorg's atomic
-   commit waits for a vblank the vendor driver never delivers
-   (`[CRTC:64:VPP-0] vblank wait timed out`), which stalls the boot by about
-   90 seconds. Expect it, and expect that warning in `dmesg`.
-4. **No GPU-accelerated 3D.** The vendor DRM driver advertises no dma-buf
+
+   **Caveat, if you do install one:** the vendor's DRM driver never delivers
+   a vblank interrupt, so X's atomic commit waits out a 100 ms timeout,
+   warns, and the kernel oopses — which kills Xorg. The first paint takes
+   about 90 seconds, and on some boots X does not survive at all. It shows
+   up as a **frozen picture** on the TV rather than as a crash message. The
+   text console is unaffected, because it does not do a flip and so never
+   waits for a vblank.
+3. **No GPU-accelerated 3D.** The vendor DRM driver advertises no dma-buf
    modifier support, so Mesa's GBM has nothing to negotiate and `kmscube`
    fails. A 2D desktop is unaffected — it does not need dma-buf — but
    hardware-accelerated 3D is not available.
 4. **The clock fallback is only unit-tested.** The chrony success path is
    proven on hardware; the "no network at boot" path has not been exercised on
    a real box.
-5. **The default root password is `tvbox`.** Change it, or do not put the box
-   on an untrusted network.
+5. **The default root password is `tvbox`.** Change it from the console —
+   the HDMI one or the SSH one — before you put the box on a network you do
+   not trust.
 6. **Only one box has been tested.** Everything below was proven on one
    development box. It has not been tested on any other hardware.
 7. **The first boot may need the vendor's own update path.** If your box does
@@ -235,7 +245,7 @@ Download it from the Releases page and check it against `kernel/SHA256SUMS`.
 | P2 | automated installer: stick → box → standalone — **done** |
 | P3 | recovery `bootcmd`: stick present means "re-provision me" — **done** |
 | P4 | systemd — a real OS rather than a rescue shell — **done** |
-| P5 | confirm HDMI and audio on real hardware; WiFi driver |
+| P5 | **text console on HDMI — done**; confirm audio on real hardware; WiFi driver |
 | P6 | packaging that assumes nothing about *this* box — **mostly done** |
 | P7 | optional boot menu via `sysboot`/extlinux — deferred |
 | P8 | rollout to other hardware, once validated |
