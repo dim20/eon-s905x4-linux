@@ -1,0 +1,24 @@
+#!/bin/sh
+# 01-quban-header — the banner at the top of the login message.
+#
+# WHY THIS IS NOT THE VENDOR'S VERSION
+#
+# The vendor shipped a script here that prints an Ubuntu-style ASCII
+# banner, with terminal escape sequences embedded in it (terminfo
+# capabilities such as \e{lightred}, written out literally because the
+# script used `echo` without -e in some paths).
+#
+# The framebuffer console on the HDMI output does not interpret escape
+# sequences - it is a plain text console, not a terminal emulator - so
+# that banner arrived on the TV as literal "\e[0;91m" text. The serial
+# console and SSH rendered it correctly, which is why the problem only
+# showed up on the television.
+#
+# Everything below is plain ASCII, so it renders identically on the TV,
+# on the serial console and over SSH.
+
+[ -r /etc/os-release ] && . /etc/os-release
+
+echo "  ${NAME:-Linux} ${VERSION_ID:-} ${VERSION_CODENAME:+($(echo "$VERSION_CODENAME" | tr '[:lower:]' '[:upper:]'))}"
+echo "  eon-s905x4-linux - Linux for the EON SDSTB02 (Amlogic S905X4 / SC2)"
+echo

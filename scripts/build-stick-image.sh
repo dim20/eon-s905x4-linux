@@ -151,6 +151,22 @@ for d in dev proc sys run tmp; do
 done
 [ -d "$ROOTFS_TREE/tmp" ] && chmod 1777 "$ROOTFS_TREE/tmp"
 
+# ---------------------------------------------------------------- /run
+# /run is runtime state: pid files, sockets, caches, and the template that
+# update-motd writes for the login message. None of it belongs in an image.
+#
+# A stale motd.dynamic in particular is worse than useless: it means the
+# box greets you with the vendor's banner, full of terminal escape
+# sequences that the framebuffer console on the HDMI output cannot render,
+# so it arrives on the television as literal escape text.
+if [ -d "$ROOTFS_TREE/run" ]; then
+    find "$ROOTFS_TREE/run" -mindepth 1 -delete 2>/dev/null || true
+    # sshd insists that this directory exists and is root-owned
+    mkdir -p "$ROOTFS_TREE/run/sshd"
+    chmod 0755 "$ROOTFS_TREE/run"
+    log "  cleared the stale runtime state out of /run"
+fi
+
 # ---------------------------------------------------------------- machine-id
 # The machine-id must NOT be shipped in the image. Every box flashed with
 # the same image would otherwise share one identity, which is wrong and can
@@ -208,7 +224,42 @@ if [ -d "$HERE/overrides" ]; then
     for src in "$HERE"/overrides/*; do
         [ -e "$src" ] || continue
         name=$(basename "$src")
-        if [ -d "$src" ]; then
+        if [ "$name" = "motd" ]; then
+            # the login-message hooks: they go to /etc/update-motd.d/ and
+            # must stay executable
+            dest="$ROOTFS_TREE/etc/update-motd.d"
+            mkdir -p "$dest"
+            # The vendor replaced Debian's own login-message hooks with
+            # their own, by symlinking /etc/update-motd.d/<name> to
+            # /usr/lib/qubian/update-motd.d/<name>. Their hooks print
+            # terminal escape sequences and Amlogic branding, and the
+            # framebuffer console on the HDMI output cannot interpret
+            # escape sequences - the banner arrives on the television as
+            # literal "\e[0;91m" text. Take the vendor's hooks out of the
+            # way entirely and use ours instead.
+            for f in "$dest"/*; do
+                [ -L "$f" ] || continue
+                case "$(readlink "$f")" in
+                    /usr/lib/qubian/update-motd.d/*)
+                        rm -f "$f"
+                        log "  removed the vendor's login-message hook $(basename "$f")"
+                        ;;
+                esac
+            done
+            rm -rf "$ROOTFS_TREE/usr/lib/qubian/update-motd.d"
+            # Remove any entry with the same name first. The vendor image
+            # has these as DANGLING SYMLINKS into a directory that is not
+            # installed, and cp refuses to write through a dangling
+            # symlink - it would fail with "not writing through dangling
+            # symlink" rather than replacing it.
+            for f in "$src"/*; do
+                [ -e "$f" ] || continue
+                rm -f "$dest/$(basename "$f")"
+            done
+            cp -a "$src/." "$dest/"
+            chmod 0755 "$dest"/* 2>/dev/null || true
+            log "  applied override: $name"
+        elif [ -d "$src" ]; then
             # a drop-in directory: e.g. chrony-wait.service.d/
             dest="$ROOTFS_TREE/etc/systemd/system/$name"
             mkdir -p "$dest"
@@ -221,6 +272,30 @@ if [ -d "$HERE/overrides" ]; then
         fi
     done
 fi
+
+# ---------------------------------------------------------------- the tools
+# The image ships scripts that use other programs, and a script that fails
+# at boot is a silent failure: the service just says "failed" in the
+# journal and the box comes up without the thing the script was for.
+#
+# enable-hdmi.sh needs modetest, from libdrm-tests, to set the display
+# mode. Without it the HDMI output is never programmed and the television
+# stays black - which is exactly what happened to the first build of this
+# image. Check for it rather than hope.
+for t in modetest; do
+    found=no
+    for d in usr/bin usr/sbin bin sbin; do
+        [ -e "$ROOTFS_TREE/$d/$t" ] && found=yes && break
+    done
+    if [ "$found" != yes ]; then
+        die "the source tree has no $t.
+  The image's enable-hdmi.sh uses it to set the display mode at boot.
+  Install it into the tree, for example:
+      apt-get install -y libdrm-tests
+  and make sure the package is recorded in the tree's dpkg database."
+    fi
+done
+log "  the tools the shipped scripts need are present"
 
 # ---------------------------------------------------------------- HDMI
 # The HDMI output needs two things, and neither happens on its own:

@@ -1,0 +1,26 @@
+#!/bin/sh
+# 15-qubian-system-state — the state of the system, printed at login.
+#
+# WHY THIS IS NOT THE VENDOR'S VERSION
+#
+# The vendor shipped a script here that printed the Amlogic brand name,
+# the CPU and DDR temperatures and a coloured usage table, using terminal
+# escape sequences throughout. The framebuffer console cannot interpret
+# escape sequences, so on the television it came out as literal escape
+# text rather than as a table.
+#
+# This version prints the same information - the facts that are actually
+# useful when you are logged in - as plain text, with no escape sequences
+# and no vendor branding.
+
+ROOTFS=$(findmnt --target / -n -o SOURCE 2>/dev/null)
+ROOTFS_TOTAL=$(df -H / --output=size 2>/dev/null | sed -n 2p)
+IP=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -1)
+
+echo "  Host:        $(hostname)"
+echo "  Kernel:      $(uname -r)"
+[ -n "$IP" ] && echo "  IP address:  $IP"
+[ -n "$ROOTFS" ] && echo "  Root FS:     $ROOTFS ${ROOTFS_TOTAL:+($ROOTFS_TOTAL)}"
+echo
+echo "  Default login: root/tvbox - change it with 'passwd'."
+echo
