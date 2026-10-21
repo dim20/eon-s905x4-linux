@@ -782,6 +782,7 @@ l	777	0:0	-	/usr/lib/systemd/system/systemd-networkd.service	etc/systemd/system/
 l	777	0:0	-	/usr/lib/systemd/system/systemd-resolved.service	etc/systemd/system/dbus-org.freedesktop.resolve1.service
 l	777	0:0	-	/usr/lib/systemd/system/systemd-timesyncd.service	etc/systemd/system/dbus-org.freedesktop.timesync1.service
 f	644	0:0	1054	-	etc/systemd/system/enable-hdmi.service
+f	644	0:0	773	-	etc/systemd/system/fontconfig-cache.service
 d	755	0:0	-	-	etc/systemd/system/getty.target.wants
 l	777	0:0	-	/usr/lib/systemd/system/getty@.service	etc/systemd/system/getty.target.wants/getty@tty1.service
 l	777	0:0	-	/usr/lib/leds-fd6513/leds-fd6513.service	etc/systemd/system/leds-fd6513.service
@@ -791,6 +792,7 @@ l	777	0:0	-	/usr/lib/systemd/system/chrony.service	etc/systemd/system/multi-user
 l	777	0:0	-	/usr/lib/systemd/system/console-setup.service	etc/systemd/system/multi-user.target.wants/console-setup.service
 l	777	0:0	-	/usr/lib/systemd/system/e2scrub_reap.service	etc/systemd/system/multi-user.target.wants/e2scrub_reap.service
 l	777	0:0	-	/etc/systemd/system/enable-hdmi.service	etc/systemd/system/multi-user.target.wants/enable-hdmi.service
+l	777	0:0	-	/etc/systemd/system/fontconfig-cache.service	etc/systemd/system/multi-user.target.wants/fontconfig-cache.service
 l	777	0:0	-	/usr/lib/systemd/system/remote-fs.target	etc/systemd/system/multi-user.target.wants/remote-fs.target
 l	777	0:0	-	/usr/lib/systemd/system/rng-tools-debian.service	etc/systemd/system/multi-user.target.wants/rng-tools-debian.service
 l	777	0:0	-	/usr/lib/systemd/system/ssh.service	etc/systemd/system/multi-user.target.wants/ssh.service
@@ -878,7 +880,7 @@ f	755	0:0	4700	-	etc/wpa_supplicant/ifupdown.sh
 l	777	0:0	-	/root/wpa_supplicant.conf	etc/wpa_supplicant/wpa_supplicant-wlan0.conf
 d	755	0:0	-	-	etc/X11
 d	755	0:0	-	-	etc/X11/xkb
-f	644	0:0	558	-	etc/X11/xorg.conf
+f	644	0:0	1639	-	etc/X11/xorg.conf
 d	755	0:0	-	-	etc/X11/Xsession.d
 f	644	0:0	997	-	etc/X11/Xsession.d/90gpg-agent
 f	644	0:0	681	-	etc/xattr.conf

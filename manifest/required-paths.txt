@@ -57,6 +57,12 @@
 /usr/sbin/chronyd 0755
 /usr/bin/curl 0755
 
+# --- the X server's configuration ----------------------------------------
+# The vendor's own asks for the modesetting driver, which picks one of the
+# OSD overlay planes - and those are not CPU-accessible, so the picture
+# never reaches the television. Ours uses the framebuffer instead.
+/etc/X11/xorg.conf 0644
+
 # --- the mount points the init mounts onto -------------------------------
 # The kernel initialises devtmpfs but does not mount it
 # (CONFIG_DEVTMPFS_MOUNT is not set), so the rootfs must contain the

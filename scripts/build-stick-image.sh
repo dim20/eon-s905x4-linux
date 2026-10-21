@@ -330,6 +330,17 @@ if [ -d "$HERE/overrides" ]; then
             cp -a "$src/." "$dest/"
             chmod 0755 "$dest"/* 2>/dev/null || true
             log "  applied override: $name"
+        elif [ "$name" = "xorg.conf" ]; then
+            # The X server's configuration. The vendor's own asks for the
+            # modesetting driver, which picks one of the OSD overlay
+            # planes - and those are not CPU-accessible, so the picture
+            # never reaches the television. Ours uses the framebuffer
+            # instead, which is the path the text console uses and the
+            # one that is known to work.
+            dest="$ROOTFS_TREE/etc/X11"
+            mkdir -p "$dest"
+            cp -a "$src" "$dest/xorg.conf"
+            log "  applied override: $name"
         elif [ -d "$src" ]; then
             # a drop-in directory: e.g. chrony-wait.service.d/
             dest="$ROOTFS_TREE/etc/systemd/system/$name"
@@ -480,6 +491,20 @@ UUID=$FAT_UUID  /boot  vfat  nosuid,nodev,noexec,nofail  0  2
 proc        /proc   proc  defaults                 0  0
 tmpfs       /tmp    tmpfs defaults,nosuid,nodev    0  0
 EOF
+
+# ------------------------------------------------- the units we enable
+# The build cannot run systemctl, so the wants-symlinks are made here.
+#
+# fontconfig-cache.service builds the font cache before anything
+# graphical starts. Without it, the first graphical program gets a
+# two-pixel default font and its text is invisible - an xterm's window
+# came out 173x62 pixels for 80x24 characters.
+for u in fontconfig-cache.service; do
+    mkdir -p "$ROOTFS_TREE/etc/systemd/system/multi-user.target.wants"
+    ln -sf "/etc/systemd/system/$u" \
+          "$ROOTFS_TREE/etc/systemd/system/multi-user.target.wants/$u"
+    log "  enabled $u"
+done
 
 # ---------------------------------------------------------------- the tools
 # The image ships scripts that use other programs, and a script that fails

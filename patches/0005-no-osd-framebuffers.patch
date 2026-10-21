@@ -1,0 +1,45 @@
+--- a/drivers/amlogic/drm/meson_fbdev.c
++++ b/drivers/amlogic/drm/meson_fbdev.c
+@@ -756,10 +756,24 @@
+ 		if (osd_plane->base.type == DRM_PLANE_TYPE_PRIMARY)
+ 			continue;
+ 
+-		fbdev = am_meson_create_drm_fbdev(dev, &osd_plane->base);
+-		fbdev->zorder = OSD_PLANE_BEGIN_ZORDER + fbdev_cnt;
+-		fbdev_cnt++;
+-		DRM_INFO("create fbdev for plane [%d]-[%p]\n", osd_plane->plane_index, fbdev);
++		/*
++		 * Do not expose the OSD overlays as framebuffers at all.
++		 *
++		 * They are not CPU-accessible: the overlay lives in the VPU's
++		 * own memory and is composited by hardware, so a framebuffer
++		 * on one of these planes can never be read or written by
++		 * anything. (That is the same reason the text console has to
++		 * be pointed at the "primary plane" framebuffer instead - see
++		 * the FBINFO_PRIMARY flag above.)
++		 *
++		 * Exposing them anyway is actively harmful: they register
++		 * first, so anything that probes for a framebuffer finds one
++		 * of these rather than the real one, and then draws into
++		 * memory it cannot reach. The X server's fbdev driver did
++		 * exactly that and the television stayed black.
++		 */
++		DRM_INFO("skipping the fbdev for the OSD plane [%d]\n",
++			 osd_plane->plane_index);
+ 	}
+ 
+ 	DRM_INFO("%s create %d out\n", __func__, fbdev_cnt);
+--- a/drivers/amlogic/media/osd/osd_fb.c
++++ b/drivers/amlogic/media/osd/osd_fb.c
+@@ -5502,9 +5502,8 @@
+ 		 * planes, and by this driver's own ioctl interface; only
+ 		 * the /dev/fbN alias for it goes away.
+ 		 */
+-		/* register frame buffer */
+-		if (register_framebuffer(fbi))
+-			osd_log_err("%s reg_fb failed\n", __func__);
++		osd_log_info("not registering the OSD overlay %d as a framebuffer\n",
++			     index);
+ 		/* create device attribute files */
+ 		if (index <= (osd_meson_dev.viu1_osd_count - 1)) {
+ 			for (i = 0; i < ARRAY_SIZE(osd_attrs); i++)
