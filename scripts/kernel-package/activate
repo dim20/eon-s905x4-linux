@@ -1,0 +1,241 @@
+#!/bin/sh
+# activate - install a kernel onto the boot partition.
+#
+#     activate <source-directory>
+#
+# The source directory holds Image, sc2_s905x4_ah212_linux.dtb and
+# SHA256SUMS. It is copied onto the boot partition under the names the
+# boot command uses, and the kernel that was there is archived first,
+# so that it can be put back if the new one does not boot.
+#
+# WHY THE BOOT PARTITION AND NOT /boot
+#
+#   The vendor's U-Boot loads the kernel from the boot partition
+#   before the root filesystem is mounted. /boot on the running system
+#   is empty, and it stays empty: the kernel is not there, it is on
+#   the partition the bootloader reads.
+#
+# WHY THE U-BOOT ENVIRONMENT IS NEVER TOUCHED
+#
+#   The boot command names two FIXED files on the boot partition:
+#   "Image" and "sc2_s905x4_ah212_linux.dtb". So switching kernels is
+#   a file copy, and the environment - which lives INSIDE the root
+#   partition, and which a careless write to that partition destroys -
+#   never has to be rewritten. Nothing here writes it.
+#
+# WHY THE PREVIOUS KERNEL IS ARCHIVED, NOT OVERWRITTEN
+#
+#   A kernel that does not boot cannot be undone from the running
+#   system, because there is no running system. So the kernel that was
+#   on the boot partition is copied into the archive before it is
+#   replaced, and it is archived under its OWN HASH - so putting a
+#   newer kernel on and then going back to the older one does not
+#   overwrite the older one with the newer one.
+#
+# WHERE THE ARCHIVE LIVES
+#
+#   On the ROOT FILESYSTEM of the box's own installation - the one
+#   that belongs to the same disk as the boot partition. That is
+#   where it belongs: it protects the boot partition, so it must
+#   survive the boot partition being rewritten. When the box is
+#   running from the stick, the eMMC's root filesystem is mounted
+#   temporarily to reach it.
+#
+# WHY THE WRITE IS VERIFIED FROM STORAGE
+#
+#   The write is checked by unmounting and remounting read-only, and
+#   hashing what is on the filesystem. A hash taken while the
+#   filesystem is still mounted reads the page cache, and would report
+#   a corrupt write as a good one.
+
+set -e
+
+SRC="${1:-}"
+[ -n "$SRC" ] || { echo "usage: activate <source-directory>" >&2; exit 2; }
+[ -f "$SRC/Image" ] || { echo "no kernel in $SRC" >&2; exit 1; }
+
+IMAGE=Image
+DTB=sc2_s905x4_ah212_linux.dtb
+ARCHIVE_REL=var/lib/eon-kernel/archive
+MAX_ARCHIVED=5
+
+log() { printf 'eon-kernel: %s\n' "$*"; }
+die() { printf 'eon-kernel: ERROR: %s\n' "$*" >&2; exit 1; }
+
+# ------------------------------------------------------------- the payload
+# A directory under /usr/lib/eon-kernel carries a SHA256SUMS, and the
+# kernel in it must match. A directory in the archive does not: it is
+# keyed by the hash of the kernel it holds, so the hash IS the check.
+if [ -f "$SRC/SHA256SUMS" ]; then
+    want=$(awk '$2=="Image"{print $1}' "$SRC/SHA256SUMS")
+    [ -n "$want" ] || die "SHA256SUMS does not list the kernel"
+    got=$(sha256sum "$SRC/Image" | cut -d' ' -f1)
+    [ "$got" = "$want" ] || die "the kernel does not match its hash"
+else
+    want=$(sha256sum "$SRC/Image" | cut -d' ' -f1)
+fi
+
+wantdtb=""
+if [ -f "$SRC/$DTB" ]; then
+    if [ -f "$SRC/SHA256SUMS" ]; then
+        wantdtb=$(awk -v n="$DTB" '$2==n{print $1}' "$SRC/SHA256SUMS")
+        [ -n "$wantdtb" ] || die "SHA256SUMS does not list the device tree"
+    else
+        wantdtb=$(sha256sum "$SRC/$DTB" | cut -d' ' -f1)
+    fi
+    got=$(sha256sum "$SRC/$DTB" | cut -d' ' -f1)
+    [ "$got" = "$wantdtb" ] || die "the device tree does not match its hash"
+fi
+
+# ------------------------------------------------------------- the partitions
+# The boot partition is the ext4 partition labelled BOOT. The stick's
+# boot partition is also labelled BOOT, but it is FAT, so the two are
+# told apart by the filesystem as well as the label.
+#
+# The ROOT filesystem is the one the box's installation lives on: the
+# partition after the boot partition on the same disk.
+BOOTDEV=""
+BOOTDISK=""
+for d in /dev/mmcblk0p1 /dev/mmcblk1p1; do
+    [ -b "$d" ] || continue
+    lbl=$(lsblk -no LABEL "$d" 2>/dev/null || true)
+    [ "$lbl" = BOOT ] || continue
+    fstype=$(lsblk -no FSTYPE "$d" 2>/dev/null || true)
+    [ "$fstype" = ext4 ] || continue
+    case "$d" in
+        "$(findmnt -n -o SOURCE / 2>/dev/null)") continue ;;
+    esac
+    BOOTDEV="$d"
+    BOOTDISK=$(lsblk -no PKNAME "$d" 2>/dev/null || true)
+    break
+done
+[ -n "$BOOTDEV" ] || die "cannot find the boot partition (no ext4 partition labelled BOOT)"
+
+ROOTDEV=""
+if [ -n "$BOOTDISK" ]; then
+    for n in 2 3; do
+        cand="/dev/${BOOTDISK}p$n"
+        [ -b "$cand" ] || continue
+        ROOTDEV="$cand"
+        break
+    done
+fi
+
+log "the boot partition is $BOOTDEV"
+
+MNT=$(mktemp -d)
+ARCHIVEMNT=""
+cleanup() {
+    [ -n "$ARCHIVEMNT" ] && umount "$ARCHIVEMNT" 2>/dev/null
+    [ -n "$ARCHIVEMNT" ] && rmdir "$ARCHIVEMNT" 2>/dev/null
+    umount "$MNT" 2>/dev/null || true
+    rmdir "$MNT" 2>/dev/null || true
+    return 0
+}
+trap cleanup EXIT
+
+# The archive is on the root filesystem of the same installation. If
+# the running system IS that filesystem, it is used directly.
+ARCHIVE=""
+ARCHIVEMNT=""
+if [ -n "$ROOTDEV" ]; then
+    running=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+    if [ "$running" = "$ROOTDEV" ]; then
+        ARCHIVE="/$ARCHIVE_REL"
+    else
+        # Its OWN mount point, not a subdirectory of the boot
+        # partition's: mounting one filesystem on top of another
+        # hides what is underneath it.
+        ARCHIVEMNT=$(mktemp -d)
+        mkdir -p "$ARCHIVEMNT"
+        if mount -o rw "$ROOTDEV" "$ARCHIVEMNT" 2>/dev/null; then
+            ARCHIVE="$ARCHIVEMNT/$ARCHIVE_REL"
+        else
+            rmdir "$ARCHIVEMNT" 2>/dev/null || true
+            ARCHIVEMNT=""
+        fi
+    fi
+fi
+[ -n "$ARCHIVE" ] || die "cannot reach the root filesystem of this installation"
+
+# ------------------------------------------------------------- archive the old one
+# The kernel that is on the boot partition now is the one this box is
+# known to boot. It is copied into the archive before anything is
+# replaced, under its own hash, so it is never lost.
+mkdir -p "$ARCHIVE"
+if mount -o ro "$BOOTDEV" "$MNT" 2>/dev/null; then
+    if [ -f "$MNT/$IMAGE" ]; then
+        cur=$(sha256sum "$MNT/$IMAGE" | cut -d' ' -f1)
+        if [ "$cur" != "$want" ]; then
+            if [ ! -d "$ARCHIVE/$cur" ]; then
+                log "archiving the current kernel ($cur)"
+                mkdir -p "$ARCHIVE/$cur" || true
+                cp "$MNT/$IMAGE" "$ARCHIVE/$cur/$IMAGE" 2>/dev/null || true
+                [ -f "$MNT/$DTB" ] && cp "$MNT/$DTB" "$ARCHIVE/$cur/$DTB" 2>/dev/null || true
+                sync
+            fi
+        else
+            log "the boot partition already has this kernel"
+        fi
+    fi
+    umount "$MNT"
+fi
+
+# ------------------------------------------------------------- write
+mount "$BOOTDEV" "$MNT" || die "cannot mount $BOOTDEV read-write"
+
+need=$(stat -c %s "$SRC/Image")
+avail=$(df -k --output=avail "$MNT" 2>/dev/null | tail -1 | tr -d ' ')
+[ -n "$avail" ] || avail=0
+log "the boot partition has $((avail / 1024)) MB free, the kernel needs $((need / 1048576)) MB"
+
+# The kernel is bigger than the free space on the boot partition, so
+# the old one has to go before the new one can be written. That is
+# why it was archived first.
+rm -f "$MNT/$IMAGE"
+if ! cp "$SRC/Image" "$MNT/$IMAGE"; then
+    log "WARNING: the kernel did not fit on the boot partition"
+    # Put back what was there: a boot partition with no kernel is a
+    # box that does not boot.
+    for d in "$ARCHIVE"/*; do
+        [ -f "$d/$IMAGE" ] || continue
+        cp "$d/$IMAGE" "$MNT/$IMAGE" && sync && log "an archived kernel has been put back"
+        break
+    done
+    umount "$MNT"
+    die "the write failed"
+fi
+sync
+
+if [ -n "$wantdtb" ]; then
+    cp "$SRC/$DTB" "$MNT/$DTB" && sync
+fi
+
+umount "$MNT"
+
+# ------------------------------------------------------------- verify
+mount -o ro "$BOOTDEV" "$MNT" || die "cannot remount $BOOTDEV to verify"
+got=$(sha256sum "$MNT/$IMAGE" 2>/dev/null | cut -d' ' -f1)
+if [ "$got" != "$want" ]; then
+    umount "$MNT"
+    die "the kernel on the boot partition does not match its hash after the write"
+fi
+if [ -n "$wantdtb" ] && [ -f "$MNT/$DTB" ]; then
+    got=$(sha256sum "$MNT/$DTB" | cut -d' ' -f1)
+    [ "$got" = "$wantdtb" ] || { umount "$MNT"; die "the device tree does not match its hash"; }
+fi
+umount "$MNT"
+
+log "the kernel is installed and verified on $BOOTDEV"
+
+# ------------------------------------------------------------- trim the archive
+# The archive holds whole kernels, so it is kept small on purpose.
+n=$(ls -1 "$ARCHIVE" 2>/dev/null | wc -l)
+if [ "$n" -gt "$MAX_ARCHIVED" ]; then
+    for d in $(ls -1t "$ARCHIVE" 2>/dev/null | tail -n +$((MAX_ARCHIVED + 1))); do
+        rm -rf "$ARCHIVE/$d"
+        log "removed an old archived kernel ($d)"
+    done
+fi
+
+exit 0

@@ -1,0 +1,111 @@
+#!/bin/sh
+# eon-kernel-list - show the kernels this box can boot.
+#
+# Three things are listed:
+#
+#   * the versions the packages have installed, in /usr/lib/eon-kernel
+#   * the kernels in the archive - the ones that were on the boot
+#     partition and were replaced, kept for rollback
+#   * which one the boot partition holds now
+#
+# The archive is what makes a failed kernel recoverable: the kernel
+# that was working is kept, under its own hash, so it can be put back
+# with eon-kernel-select.
+
+set -e
+
+IMAGE=Image
+DTB=sc2_s905x4_ah212_linux.dtb
+LIB=/usr/lib/eon-kernel
+ARCHIVE_REL=var/lib/eon-kernel/archive
+
+hash_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
+
+# ------------------------------------------------------------- the partitions
+# The boot partition is the ext4 partition labelled BOOT. The stick's
+# is labelled BOOT too, but it is FAT.
+BOOTDEV=""
+BOOTDISK=""
+for d in /dev/mmcblk0p1 /dev/mmcblk1p1; do
+    [ -b "$d" ] || continue
+    [ "$(lsblk -no LABEL "$d" 2>/dev/null || true)" = BOOT ] || continue
+    [ "$(lsblk -no FSTYPE "$d" 2>/dev/null || true)" = ext4 ] || continue
+    BOOTDEV="$d"
+    BOOTDISK=$(lsblk -no PKNAME "$d" 2>/dev/null || true)
+    break
+done
+
+ROOTDEV=""
+if [ -n "$BOOTDISK" ]; then
+    for n in 2 3; do
+        cand="/dev/${BOOTDISK}p$n"
+        [ -b "$cand" ] || continue
+        ROOTDEV="$cand"
+        break
+    done
+fi
+
+# The archive is on the root filesystem of the installation the boot
+# partition belongs to. If that is the running filesystem, it is used
+# directly; otherwise it is mounted read-only for the listing.
+ARCHIVE=""
+ARCHIVEMNT=""
+if [ -n "$ROOTDEV" ]; then
+    running=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+    if [ "$running" = "$ROOTDEV" ]; then
+        ARCHIVE="/$ARCHIVE_REL"
+    else
+        ARCHIVEMNT=$(mktemp -d)
+        if mount -o ro "$ROOTDEV" "$ARCHIVEMNT" 2>/dev/null; then
+            ARCHIVE="$ARCHIVEMNT/$ARCHIVE_REL"
+        else
+            rmdir "$ARCHIVEMNT" 2>/dev/null || true
+            ARCHIVEMNT=""
+        fi
+    fi
+fi
+
+cleanup() { [ -n "$ARCHIVEMNT" ] && umount "$ARCHIVEMNT" 2>/dev/null; [ -n "$ARCHIVEMNT" ] && rmdir "$ARCHIVEMNT" 2>/dev/null; return 0; }
+trap cleanup EXIT
+
+# ------------------------------------------------------------- what is active
+active=""
+if [ -n "$BOOTDEV" ]; then
+    MNT=$(mktemp -d)
+    if mount -o ro "$BOOTDEV" "$MNT" 2>/dev/null; then
+        [ -f "$MNT/$IMAGE" ] && active=$(hash_of "$MNT/$IMAGE")
+        umount "$MNT"
+    fi
+    rmdir "$MNT" 2>/dev/null || true
+fi
+
+printf 'the kernels on this box\n'
+printf -- '-----------------------\n'
+
+if [ -d "$LIB" ]; then
+    for v in $(ls -1 "$LIB" 2>/dev/null); do
+        [ -f "$LIB/$v/$IMAGE" ] || continue
+        h=$(hash_of "$LIB/$v/$IMAGE")
+        mark=" "
+        [ "$h" = "$active" ] && mark="*"
+        printf '%s %-24s %s\n' "$mark" "$v" "$h"
+    done
+fi
+
+if [ -n "$ARCHIVE" ] && [ -d "$ARCHIVE" ]; then
+    for h in $(ls -1 "$ARCHIVE" 2>/dev/null); do
+        [ -f "$ARCHIVE/$h/$IMAGE" ] || continue
+        mark=" "
+        [ "$h" = "$active" ] && mark="*"
+        printf '%s %-24s %s  (archived)\n' "$mark" "$h" "$h"
+    done
+fi
+
+printf -- '\n* the kernel on the boot partition now\n'
+if [ -n "$active" ]; then
+    printf '  %s\n' "$active"
+else
+    printf '  (the boot partition could not be read)\n'
+fi
+
+printf -- '\nto choose a kernel: eon-kernel-select <version>\n'

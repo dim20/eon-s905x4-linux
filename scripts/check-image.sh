@@ -1,7 +1,8 @@
 #!/bin/bash
 # check-image.sh — check an image against the manifest.
 #
-#     scripts/check-image.sh --rootfs <dir> [--p1 <image>] [--manifest <dir>]
+#     scripts/check-image.sh --rootfs <dir> [--p1 <image>] [--package <deb>]
+#                               [--manifest <dir>]
 #
 # The manifest is data, not code: manifest/ says what the image must
 # contain and what it must not. This script is the only thing that reads
@@ -25,6 +26,7 @@ REPO="$(cd "$HERE/.." && pwd)"
 
 ROOTFS=""
 P1=""
+PACKAGE=""
 MANIFEST="$REPO/manifest"
 QUIET=0
 
@@ -32,6 +34,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --rootfs)   ROOTFS="${2:-}"; shift 2 ;;
         --p1)       P1="${2:-}"; shift 2 ;;
+        --package)  PACKAGE="${2:-}"; shift 2 ;;
         --manifest) MANIFEST="${2:-}"; shift 2 ;;
         --quiet)    QUIET=1; shift ;;
         -h|--help)  sed -n '2,22p' "$0"; exit 0 ;;
@@ -39,7 +42,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-[ -n "$ROOTFS" ] || { echo "usage: $0 --rootfs <dir> [--p1 <image>]" >&2; exit 2; }
+[ -n "$ROOTFS" ] || { echo "usage: $0 --rootfs <dir> [--p1 <image>] [--package <deb>]" >&2; exit 2; }
 [ -d "$ROOTFS" ] || { echo "not a directory: $ROOTFS" >&2; exit 2; }
 [ -d "$MANIFEST" ] || { echo "no manifest directory: $MANIFEST" >&2; exit 2; }
 
@@ -293,7 +296,7 @@ check_p1() {
     if [ -f "$sums" ]; then
         local f want got
         for f in Image sc2_s905x4_ah212_linux.dtb; do
-            want=$(awk -v n="$f" '$2==n{print $1}' "$sums")
+            want=$(awk -v n="$f" '{n=$2; sub(/.*\//,"",n); if (n==v) print $1}' v="$f" "$sums")
             [ -n "$want" ] || continue
             got=$(mtype -i "$P1" "::/$f" 2>/dev/null | sha256sum | cut -d' ' -f1)
             if [ "$got" = "$want" ]; then
@@ -303,6 +306,108 @@ check_p1() {
             fi
         done
     fi
+}
+
+# ---------------------------------------------------------------- package
+# The kernel package is a separate artefact from the image, with its
+# own manifest (manifest/kernel-package.txt). It is checked against
+# the BUILT package, not against the tree it was built from - the same
+# rule as for the image: a defect introduced while assembling the
+# package would pass a check that ran against the input.
+check_package() {
+    [ -n "$PACKAGE" ] || return 0
+    [ -f "$PACKAGE" ] || { fail "the package $PACKAGE does not exist"; return; }
+    command -v dpkg-deb >/dev/null || { fail "dpkg-deb is not installed - cannot check the package"; return; }
+
+    local tmp
+    tmp=$(mktemp -d) || { fail "cannot make a temporary directory"; return; }
+    # shellcheck disable=SC2064
+    trap "rm -rf '$tmp'" RETURN
+
+    dpkg-deb -x "$PACKAGE" "$tmp" 2>/dev/null || {
+        fail "the package cannot be unpacked"; return; }
+
+    # the control fields
+    local ctl="$tmp/DEBIAN/control"
+    local name arch
+    name=$(dpkg-deb --field "$PACKAGE" Package 2>/dev/null || true)
+    arch=$(dpkg-deb --field "$PACKAGE" Architecture 2>/dev/null || true)
+    local want_name want_arch
+    want_name=$(manifest_value package-name)
+    want_arch=$(manifest_value package-architecture)
+    if [ -n "$want_name" ]; then
+        if [ "$name" = "$want_name" ]; then ok
+        else fail "the package is called '$name', expected '$want_name'"; fi
+    fi
+    if [ -n "$want_arch" ]; then
+        if [ "$arch" = "$want_arch" ]; then ok
+        else fail "the package's architecture is '$arch', expected '$want_arch'"; fi
+    fi
+
+    # the files it must contain
+    local f
+    while read -r f; do
+        [ -n "$f" ] || continue
+        if [ -e "$tmp/$f" ]; then ok
+        else fail "the package does not contain '$f'"; fi
+    done < <(entries "$MANIFEST/kernel-package.txt" | grep '^package-files = ' | sed 's/^package-files = //')
+
+    # The maintainer scripts it must have.
+    #
+    # dpkg-deb -x does NOT extract DEBIAN/ - that is the package's
+    # control data, not its files - so they are listed from the
+    # control tarball instead.
+    local ctrl
+    ctrl=$(dpkg-deb --ctrl-tarfile "$PACKAGE" 2>/dev/null | tar -tf - 2>/dev/null | sed 's|^\./||' || true)
+    while read -r f; do
+        [ -n "$f" ] || continue
+        if printf '%s\n' "$ctrl" | grep -qx "$f"; then ok
+        else fail "the package has no maintainer script '$f'"; fi
+    done < <(entries "$MANIFEST/kernel-package.txt" | grep '^package-scripts = ' | sed 's/^package-scripts = //')
+
+    # what it must not contain
+    while read -r f; do
+        [ -n "$f" ] || continue
+        if [ -e "$tmp/$f" ]; then
+            fail "the package must not contain '$f'"
+        else
+            ok
+        fi
+    done < <(entries "$MANIFEST/kernel-package.txt" | grep '^package-forbid = ' | sed 's/^package-forbid = //')
+
+    # The kernel and the device tree in the package must be the ones
+    # this project publishes. Their hashes live in kernel/SHA256SUMS,
+    # so there is one place that says what the kernel is.
+    local sums="$REPO/kernel/SHA256SUMS"
+    if [ -f "$sums" ]; then
+        local ver dir want got
+        ver=$(dpkg-deb --field "$PACKAGE" Version 2>/dev/null || true)
+        dir="$tmp/usr/lib/eon-kernel/$ver"
+        for f in Image sc2_s905x4_ah212_linux.dtb; do
+            want=$(awk -v n="$f" '{n=$2; sub(/.*\//,"",n); if (n==v) print $1}' v="$f" "$sums")
+            [ -n "$want" ] || continue
+            if [ ! -f "$dir/$f" ]; then
+                fail "the package does not contain $f for version $ver"
+                continue
+            fi
+            got=$(sha256sum "$dir/$f" | cut -d' ' -f1)
+            if [ "$got" = "$want" ]; then
+                ok
+            else
+                fail "the $f in the package is $got, expected $want (kernel/SHA256SUMS)"
+            fi
+        done
+
+        # the package carries the hashes of what it installs, so that
+        # what was installed can always be checked
+        if [ -f "$dir/SHA256SUMS" ]; then ok
+        else fail "the package does not carry SHA256SUMS for version $ver"; fi
+    fi
+}
+
+# The value of a key in a manifest file. Used by the package checks.
+manifest_value() {
+    sed -n "s/^$1[[:space:]]*=[[:space:]]*//p" "$MANIFEST/kernel-package.txt" 2>/dev/null | head -1
 }
 
 # ---------------------------------------------------------------- run
@@ -319,6 +424,7 @@ check_forbidden_paths
 [ -f "$MANIFEST/masked-units.txt" ] && check_masked_units
 [ -f "$MANIFEST/global.txt" ] && check_global
 check_p1
+check_package
 
 # The vendor leftovers are a record, not a check, but they should be
 # visible whenever the image is checked.

@@ -1,0 +1,76 @@
+# The rules for the kernel package.
+#
+# The package is a separate artefact from the image: the image ships
+# the kernel on the boot partition, and the package is how that kernel
+# is installed and replaced afterwards. So it has its own manifest.
+#
+# Format: key = value, one per line, same as global.txt. Lines
+# starting with '#' and blank lines are ignored. An unknown key is an
+# ERROR, not a warning - a rule that is silently ignored looks like
+# protection and is not.
+#
+# Checked by scripts/check-image.sh --package <deb>.
+
+# The package's name.
+#
+# It is called "eon-kernel" and not "linux-image-..." on purpose: it is
+# not a Debian kernel package, it does not follow the Debian kernel
+# package layout, and pretending otherwise would make it look
+# interchangeable with something it is not.
+package-name = eon-kernel
+
+# The architecture the package is built for. The kernel is an arm64
+# Image and the scripts assume the tools on the box.
+package-architecture = arm64
+
+# The files the package must contain, one per line.
+#
+# The kernel and the device tree are under /usr/lib/eon-kernel/<version>/
+# so that several versions can be installed at once and the operator
+# can choose between them.
+#
+# The two commands are what the operator uses to choose and to see.
+package-files = usr/lib/eon-kernel/activate
+package-files = usr/sbin/eon-kernel-list
+package-files = usr/sbin/eon-kernel-select
+
+# The maintainer scripts the package must have.
+#
+# The postinst is the one that matters: it is what writes the kernel
+# to the boot partition, and a package without it would install the
+# files and boot the old kernel, silently.
+package-scripts = postinst
+package-scripts = prerm
+package-scripts = postrm
+
+# The kernel, the device tree and the hashes travel together, under
+# /usr/lib/eon-kernel/<version>/ - so that several versions can be
+# installed at once and the operator can choose between them. The
+# checker knows the version from the package itself.
+#
+# The kernel and the device tree in the package must be the ones this
+# project publishes - the same files the image ships.
+#
+# The hashes live in kernel/SHA256SUMS, so there is one place that
+# says what the kernel is. A package built from a different kernel
+# would fail this, which is the point: the kernel and the package that
+# installs it must not be able to disagree.
+package-hashes-from = kernel/SHA256SUMS
+
+# The package must NOT contain a module tree.
+#
+# The kernel is built with everything in, so there are no modules to
+# install. A package that carried one would be installing modules for
+# a kernel that cannot load them - the same dead weight as the
+# vendor's module tree, which manifest/forbidden-paths.txt keeps out
+# of the image.
+package-forbid = usr/lib/modules
+
+# The package must not contain anything from the desktop.
+#
+# The same rule as the image: this is a server image and the kernel
+# package must not smuggle a display manager in through the back door.
+package-forbid = usr/bin/lightdm
+package-forbid = usr/sbin/lightdm
+package-forbid = usr/bin/Xorg
+package-forbid = usr/lib/xorg

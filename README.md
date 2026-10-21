@@ -39,6 +39,7 @@ validated on other hardware.
 | Bootcmd installed automatically | ✅ the installer discovers the U-Boot env and sets it |
 | U-Boot recovery window | ✅ `bootdelay=3` — a "hit any key" prompt on every boot |
 | Root filesystem size | ✅ 15 GB on the eMMC, not the 744 MB it started as |
+| Kernel as a package | ✅ `apt install` it; the old kernel is archived, so a bad one can be put back |
 
 ### Quick start
 
@@ -213,6 +214,7 @@ docs/
   install-image-requirements.md   what the image must fix, and why
   build-the-kernel.md             how the kernel was built; required for GPL compliance
   recovery.md                     unlock / ADNL / fastboot, and how to get back in
+  kernel-package.md              the kernel as an installable package, and the rollback
   troubleshooting.md              the traps, written down so you can avoid them
   lessons.md                      engineering lessons from this project
 manifest/
@@ -223,6 +225,7 @@ manifest/
   required-units.txt              systemd units it must have enabled
   global.txt                      rules that apply to the whole rootfs
   boot-artifacts.txt              what must be at the root of the boot partition
+  kernel-package.txt              what the kernel package must contain
   inventory.txt                   every file in the image, with owner, mode, size, checksum
   provenance.txt                  where the rootfs came from, and what we changed
   vendor-leftovers.txt            what is still the vendor's, and what it costs
@@ -233,7 +236,8 @@ scripts/
   prepare-stick.sh                make a stick a self-contained live system
   grow-stick.sh                   extend a stick's rootfs into leftover space
   build-stick-image.sh            build the published .img.gz from a rootfs tree
-  check-image.sh                  check an image against the manifest
+  build-kernel-package.sh         build the kernel as an installable .deb
+  check-image.sh                  check an image (and a kernel package) against the manifest
   inventory.sh                    write down what is in an image, and diff it
   release.sh                      build a release, check it, print the test checklist
   write-stick-image.sh            write it to a stick and verify it byte-for-byte

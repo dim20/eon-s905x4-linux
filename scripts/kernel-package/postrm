@@ -1,0 +1,13 @@
+#!/bin/sh
+# postrm - the package has been removed.
+#
+# Nothing to clean up. The archived kernels are deliberately left:
+# they are the rollback for a kernel that does not boot, and they are
+# not this package's files.
+
+set -e
+
+printf 'eon-kernel: the archived kernels have been kept, for rollback\n'
+printf "eon-kernel: run 'eon-kernel-select list' to see them\n"
+
+exit 0

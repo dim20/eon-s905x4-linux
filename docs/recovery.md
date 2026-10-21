@@ -16,8 +16,14 @@ Try these in order. Each is less invasive than the next.
 |---|---|---|---|
 | 1 | **UART console** | CP210x adapter on the UART pads, 1 Mbaud | none |
 | 2 | **The USB stick** | a stick flashed with the published image | none |
-| 3 | **Button + USB A–A** → DNL → fastboot | USB A–A cable | low |
-| 4 | **Reflash the bootloader** | DNL/fastboot write access | moderate |
+| 3 | **`eon-kernel-select`** | a shell, and the kernel package installed | none |
+| 4 | **Button + USB A–A** → DNL → fastboot | USB A–A cable | low |
+| 5 | **Reflash the bootloader** | DNL/fastboot write access | moderate |
+
+Method 3 is the quickest one *if the kernel was installed as a package*,
+because the kernel that was working is archived and can simply be put
+back — see [section 5](#5-a-kernel-that-does-not-boot). It needs a
+shell, so it comes after the stick and the console.
 
 ### The environment is reachable from Linux
 
@@ -167,6 +173,94 @@ for reflash recovery — not for any procedure documented here.
    ```sh
    dd if=/dev/mmcblk0 bs=512 skip=237568 count=1024 of=env-block.bin
    ```
+6. **Keep the USB stick plugged in while you are experimenting with the boot
+   path.** This is the rule that is learned the hard way.
+
+   The stick is the recovery key: the vendor's pre-boot chain runs the
+   stick's `aml_autoscript` *before* the saved `bootcmd`, so a box with a
+   stick attached always boots the stick, whatever state the eMMC is in.
+   That makes the stick the way back from a bad kernel — but only if it is
+   actually plugged in.
+
+   On 2026-10-21 the eMMC's kernel and device tree were replaced with an
+   experimental pair while the stick was **not** attached. The box did not
+   boot, and the only way back was for someone to be at the box and plug
+   the stick in. It worked, but it should not have needed a person.
+
+   So: **plug the stick in before you change the boot path, and leave it in
+   until the change is proven.** When you are done, unplug it and power
+   cycle to confirm the eMMC boots on its own.
+
+7. **Keep the known-good kernel and device tree somewhere that survives a
+   re-provisioning.** `/root/Image.good` on the eMMC did **not** survive one:
+   the installer rewrites the root filesystem, and the file went with it.
+   The repository's `kernel/Image` did survive, because the repository is
+   not the thing being rewritten. Point at the repository, not at the box.
+
+---
+
+## 5. A kernel that does not boot
+
+This is the commonest failure, and the one the recovery ladder is best at.
+
+### The kernel package makes it recoverable
+
+If the kernel was installed with the package
+([`kernel-package.md`](kernel-package.md)), then the kernel that was
+working is **archived** — copied to
+`/var/lib/eon-kernel/archive/<its hash>/` on the root filesystem of the
+installation, before the new one was put on the boot partition.
+
+So the recovery is:
+
+1. Get a shell on the box — with the USB stick (section 2), or at the
+   U-Boot prompt over the serial console (section 1).
+2. Put the archived kernel back:
+   ```sh
+   eon-kernel-list          # what is there
+   eon-kernel-select <hash> # put one back
+   reboot
+   ```
+
+`eon-kernel-select` writes the kernel to the boot partition, verifies the
+write by reading it back from the filesystem, and leaves the boot command
+alone — it names fixed files, so a rollback is a file copy.
+
+With the stick, the archive is on the eMMC's root filesystem, so the
+command finds it even though the running system is the stick.
+
+### Without the package
+
+Without the package there is no archive, and the recovery is by hand:
+
+1. Get to a U-Boot prompt (section 1) and boot the stick's kernel by
+   hand, or let the stick boot and fix the eMMC over SSH.
+2. Copy a known-good kernel onto the eMMC's boot partition:
+   ```sh
+   mount /dev/mmcblk0p1 /mnt/p1
+   cp /root/Image.good /mnt/p1/Image
+   cp /root/dtb.good  /mnt/p1/sc2_s905x4_ah212_linux.dtb
+   sync; umount /mnt/p1
+   ```
+3. Reboot.
+
+The known-good pair must come from somewhere that survived — see rule 7
+above.
+
+### Reading the panic
+
+The serial console is where a boot failure shows itself, and it is worth
+knowing what the common ones look like:
+
+| On the serial console | What it means |
+|---|---|
+| `Kernel panic - not syncing: VFS: Unable to mount root fs` | the root device is wrong — `root=` in the boot command names a partition that does not exist, which is what happens when a device tree describes different hardware |
+| `Unable to handle kernel <NULL> pointer` | a driver dereferenced something it expected; the backtrace above it names the driver |
+| Nothing at all, and the box reboots | the kernel never got that far — check that the DTB loaded, and that `bootargs` is set at all |
+| `Waiting for ...` or a hang before the kernel banner | the bootloader could not load the kernel: the file is corrupt, the wrong size, or the address is wrong |
+
+The console is at **1,000,000 baud**, 8N1 — see section 1 for the rest of
+its quirks.
 
 ---
 

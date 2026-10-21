@@ -1,0 +1,78 @@
+#!/bin/sh
+# postinst - install a kernel onto the boot partition.
+#
+# WHAT THIS DOES
+#
+#   The kernel does not live in the root filesystem. It lives on the
+#   boot partition, because the vendor's U-Boot loads it from there
+#   before the root filesystem is mounted. So installing a kernel means
+#   writing to another filesystem, and the failure mode of getting that
+#   wrong is a box that does not boot.
+#
+#   The rules this follows:
+#
+#   1. NEVER DESTROY THE KERNEL THAT WORKS. The one on the boot
+#      partition is archived before it is replaced, and it is archived
+#      under its own hash, so it can be put back.
+#
+#   2. NEVER TOUCH THE U-BOOT ENVIRONMENT. The environment is what
+#      says which kernel to load, and it lives INSIDE the root
+#      partition - so anything that rewrites the root partition can
+#      destroy it. The boot command names two FIXED files, so
+#      switching kernels is a file copy and the environment does not
+#      have to change at all.
+#
+#   3. VERIFY FROM STORAGE, NOT FROM CACHE. The write is checked by
+#      unmounting and remounting read-only, and hashing what is on the
+#      filesystem.
+#
+#   4. SAY WHAT HAPPENED. The operator is told what is on the boot
+#      partition now and how to choose a different one.
+
+set -e
+
+# The version is read from dpkg rather than taken from the argument.
+# dpkg passes "configure" as the argument on a normal install and the
+# old version on an upgrade - never the new version - so the argument
+# is not the thing to ask.
+VERSION=$(dpkg-query -W -f='${Version}' eon-kernel 2>/dev/null || true)
+LIBDIR="/usr/lib/eon-kernel/$VERSION"
+
+log() { printf 'eon-kernel: %s\n' "$*"; }
+die() { printf 'eon-kernel: ERROR: %s\n' "$*" >&2; exit 1; }
+
+[ -n "$VERSION" ] || die "cannot determine the package's version"
+[ -d "$LIBDIR" ] || die "the package's files are missing from $LIBDIR"
+
+# The shared activation logic: write it to the boot partition, archive
+# what was there, verify the write from storage.
+if [ -x /usr/lib/eon-kernel/activate ]; then
+    /usr/lib/eon-kernel/activate "$LIBDIR" || die "the kernel was not installed"
+else
+    die "/usr/lib/eon-kernel/activate is missing - the package was built wrong"
+fi
+
+log "installed kernel $VERSION"
+
+# The boot command names fixed files, so nothing has to be changed for
+# the new kernel to be the one that boots. But it is worth checking
+# that this is true, because if the boot command names something else
+# then the kernel is installed and not booted, and the operator should
+# know that now rather than at the next reboot.
+if command -v fw_printenv >/dev/null 2>&1 && [ -f /etc/fw_env.config ]; then
+    cmd=$(fw_printenv bootcmd 2>/dev/null || true)
+    case "$cmd" in
+        *Image*) : ;;
+        *)  log "NOTE: the boot command does not name a kernel file."
+            log "      it is: $cmd"
+            log "      the kernel is installed, but the boot command must be"
+            log "      updated by hand for it to be used." ;;
+    esac
+else
+    log "the U-Boot environment is not reachable; the kernel is installed"
+fi
+
+log "run 'eon-kernel-list' to see what is installed"
+log "run 'eon-kernel-select <version>' to choose which one boots"
+
+exit 0

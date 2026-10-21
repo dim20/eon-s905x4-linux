@@ -1,0 +1,202 @@
+#!/bin/sh
+# eon-kernel-select - choose which kernel this box boots.
+#
+#     eon-kernel-select list
+#     eon-kernel-select <version-or-hash>
+#
+# This is the rollback. When a new kernel does not boot, the box is
+# reachable through the recovery ladder (see docs/recovery.md) - the
+# USB stick, or the U-Boot prompt over the serial console - and from
+# there this command puts a kernel that is known to work back on the
+# boot partition.
+#
+# WHY THE BOOT COMMAND USUALLY DOES NOT CHANGE
+#
+#   The boot command names two FIXED files on the boot partition:
+#   "Image" and "sc2_s905x4_ah212_linux.dtb". Switching kernels is
+#   therefore a file copy, and the U-Boot environment - which lives
+#   INSIDE the root partition - does not have to be rewritten at all.
+#   This script only touches it if it does not already name those
+#   files, and it backs it up before it does.
+
+set -e
+
+IMAGE=Image
+DTB=sc2_s905x4_ah212_linux.dtb
+LIB=/usr/lib/eon-kernel
+ARCHIVE_REL=var/lib/eon-kernel/archive
+BACKUP=/var/lib/eon-kernel/env-backup
+
+log() { printf 'eon-kernel: %s\n' "$*"; }
+die() { printf 'eon-kernel: ERROR: %s\n' "$*" >&2; exit 1; }
+
+[ $# -ge 1 ] || { echo "usage: eon-kernel-select <version-or-hash>" >&2; exit 2; }
+
+# ------------------------------------------------------------------ list
+if [ "$1" = "list" ]; then
+    exec /usr/sbin/eon-kernel-list
+fi
+
+[ "$(id -u)" -eq 0 ] || die "must run as root"
+
+want="$1"
+
+# ------------------------------------------------------------- the archive
+# The archive is on the root filesystem of the installation the boot
+# partition belongs to. If the box is running from the stick, that is
+# the eMMC's root filesystem, not the running one - so it is mounted
+# to be reached.
+BOOTDISK=""
+ARCHIVE=""
+ARCHIVEMNT=""
+for d in /dev/mmcblk0p1 /dev/mmcblk1p1; do
+    [ -b "$d" ] || continue
+    [ "$(lsblk -no LABEL "$d" 2>/dev/null || true)" = BOOT ] || continue
+    [ "$(lsblk -no FSTYPE "$d" 2>/dev/null || true)" = ext4 ] || continue
+    BOOTDISK=$(lsblk -no PKNAME "$d" 2>/dev/null || true)
+    break
+done
+
+if [ -n "$BOOTDISK" ]; then
+    ROOTDEV=""
+    for n in 2 3; do
+        cand="/dev/${BOOTDISK}p$n"
+        [ -b "$cand" ] || continue
+        ROOTDEV="$cand"
+        break
+    done
+    if [ -n "$ROOTDEV" ]; then
+        running=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+        if [ "$running" = "$ROOTDEV" ]; then
+            ARCHIVE="/$ARCHIVE_REL"
+        else
+            ARCHIVEMNT=$(mktemp -d)
+            if mount -o rw "$ROOTDEV" "$ARCHIVEMNT" 2>/dev/null; then
+                ARCHIVE="$ARCHIVEMNT/$ARCHIVE_REL"
+            else
+                rmdir "$ARCHIVEMNT" 2>/dev/null || true
+                ARCHIVEMNT=""
+            fi
+        fi
+    fi
+fi
+[ -n "$ARCHIVE" ] || ARCHIVE="/$ARCHIVE_REL"
+
+cleanup() {
+    [ -n "$ARCHIVEMNT" ] && umount "$ARCHIVEMNT" 2>/dev/null
+    [ -n "$ARCHIVEMNT" ] && rmdir "$ARCHIVEMNT" 2>/dev/null
+    return 0
+}
+trap cleanup EXIT
+
+# ------------------------------------------------------------------ find it
+# A version is a directory under /usr/lib/eon-kernel; a hash is a
+# directory in the archive. Either is a directory holding a kernel.
+src=""
+for d in "$LIB/$want" "$ARCHIVE/$want"; do
+    if [ -f "$d/$IMAGE" ]; then
+        src="$d"
+        break
+    fi
+done
+
+if [ -z "$src" ]; then
+    # A prefix of a hash is enough to identify one.
+    for d in "$LIB"/* "$ARCHIVE"/*; do
+        [ -f "$d/$IMAGE" ] || continue
+        case "$(basename "$d")" in
+            "$want"*) src="$d"; break ;;
+        esac
+    done
+fi
+
+[ -n "$src" ] || {
+    echo "no kernel matches '$want'" >&2
+    echo "run 'eon-kernel-select list' to see what is installed" >&2
+    exit 1
+}
+
+ver="$(basename "$src")"
+log "using $ver"
+
+# ------------------------------------------------------------------ install it
+# The shared activation logic archives whatever is on the boot
+# partition, writes the chosen kernel, and verifies the write.
+if [ -x /usr/lib/eon-kernel/activate ]; then
+    /usr/lib/eon-kernel/activate "$src" || die "the kernel was not installed"
+else
+    die "/usr/lib/eon-kernel/activate is missing - the package was built wrong"
+fi
+
+# ------------------------------------------------------------------ the environment
+# The boot command has to name the files that are on the boot
+# partition. Usually it already does, and then there is nothing to do
+# - which is the good case, because the environment lives inside the
+# root partition and rewriting it is the one genuinely dangerous thing
+# this script could do.
+if ! command -v fw_printenv >/dev/null 2>&1; then
+    log "fw_printenv is not available; the kernel is on the boot partition"
+    exit 0
+fi
+
+if [ ! -f /etc/fw_env.config ]; then
+    if [ -x /root/find-env.sh ]; then
+        /root/find-env.sh >/dev/null 2>&1 || true
+    fi
+fi
+
+if [ ! -f /etc/fw_env.config ]; then
+    log "the U-Boot environment cannot be read; the kernel is on the boot partition"
+    exit 0
+fi
+
+cmd=$(fw_printenv bootcmd 2>/dev/null || true)
+[ -n "$cmd" ] || {
+    log "the boot command could not be read; the kernel is on the boot partition"
+    exit 0
+}
+
+# Does it already name the fixed files? Then it is already right.
+case "$cmd" in
+    *" $IMAGE "*|*" $IMAGE;"*|*" $IMAGE") : ;;
+esac
+if printf '%s' "$cmd" | grep -qE "(ext4|fat)load [^;]*[[:space:]]$IMAGE([[:space:]]|;)"; then
+    log "the boot command already names $IMAGE"
+    log "selected kernel $ver"
+    log "reboot to run it"
+    exit 0
+fi
+
+# It names something else. Point it at the fixed names.
+new=$(printf '%s' "$cmd" | sed -e "s|Image[^ ]*|$IMAGE|g" \
+                               -e "s|sc2_s905x4_ah212_linux.dtb[^ ]*|$DTB|g")
+if [ "$new" = "$cmd" ]; then
+    log "the boot command does not name a kernel this script recognises; it is left alone"
+    log "the kernel is on the boot partition: $cmd"
+    exit 0
+fi
+
+# Back the environment up before writing it.
+mkdir -p "$BACKUP"
+if fw_printenv > "$BACKUP/env.txt" 2>/dev/null; then
+    cp /etc/fw_env.config "$BACKUP/fw_env.config" 2>/dev/null || true
+    log "the U-Boot environment has been backed up to $BACKUP"
+fi
+
+if fw_setenv bootcmd "$new"; then
+    check=$(fw_printenv bootcmd 2>/dev/null || true)
+    if [ "$check" != "$new" ]; then
+        log "WARNING: the boot command did not take; it reads: $check"
+        exit 1
+    fi
+    log "the boot command now names $IMAGE"
+else
+    log "WARNING: could not set the boot command"
+    log "the kernel is on the boot partition, but the boot command still names the old one"
+    exit 1
+fi
+
+log "selected kernel $ver"
+log "reboot to run it"
+
+exit 0

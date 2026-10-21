@@ -16,6 +16,7 @@
 #   dist/<name>-img.gz        the stick image
 #   dist/Image                the kernel
 #   dist/sc2_s905x4_ah212_linux.dtb   the device tree
+#   dist/<name>-kernel.deb    the kernel as an installable package
 #   dist/SHA256SUMS           their checksums
 #   dist/inventory.txt        what is in the image, file by file
 #   dist/TEST-CHECKLIST.md    what a human has to do next
@@ -76,6 +77,32 @@ cp "$REPO/kernel/sc2_s905x4_ah212_linux.dtb" "$DIST/sc2_s905x4_ah212_linux.dtb"
 } > "$DIST/SHA256SUMS"
 cat "$DIST/SHA256SUMS"
 
+# ---------------------------------------------------------------- 3b. package
+# The kernel as an installable package, so that a box that is already
+# installed can have its kernel updated with apt - and can be rolled
+# back if the new one does not boot.
+echo
+echo "=== 3b. the kernel package ========================================="
+KVER=${KVER:-$(cat "$REPO/kernel/VERSION" 2>/dev/null || echo "")}
+[ -n "$KVER" ] || { echo "[release] kernel/VERSION is missing - cannot build the package" >&2; exit 1; }
+PKG="$DIST/$NAME-kernel.deb"
+SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(date -u -d "2026-01-01" +%s)}
+export SOURCE_DATE_EPOCH
+"$REPO/scripts/build-kernel-package.sh" \
+    --kernel "$REPO/kernel/Image" \
+    --dtb "$REPO/kernel/sc2_s905x4_ah212_linux.dtb" \
+    --version "$KVER" \
+    --out "$PKG" >/dev/null
+echo "[release] built $PKG"
+
+# The package has its own manifest, and it is checked against the
+# BUILT package - the same rule as the image.
+"$REPO/scripts/check-image.sh" --rootfs "$TREE" --package "$PKG" --quiet \
+    || { echo "[release] the kernel package FAILED the manifest - refusing to release" >&2; exit 1; }
+echo "[release] the kernel package passed the manifest"
+
+( cd "$DIST" && sha256sum "$NAME-kernel.deb" ) >> "$DIST/SHA256SUMS"
+
 # ---------------------------------------------------------------- 4. the box
 echo
 echo "=== 4. what a human has to do ======================================="
@@ -124,6 +151,25 @@ checks are done; these are the ones that cannot be.
       script has been removed from the image.
 
       ls /dev/sda2 >/dev/null && df -h /dev/sda2
+
+- [ ] Install the kernel package on the box and check that it takes:
+
+      dpkg -i $NAME-kernel.deb
+      eon-kernel-list
+
+      The kernel on the boot partition must be the one just installed,
+      and the one that was there before must be in the ARCHIVE - that
+      archive is the rollback.
+
+- [ ] Check the rollback works: put the previous kernel back and reboot.
+
+      eon-kernel-select <the archived hash>
+      reboot
+
+      The box must come up on the previous kernel. Then put the new one
+      back:
+
+      eon-kernel-select <the new version>
 EOF
 cat "$DIST/TEST-CHECKLIST.md"
 
