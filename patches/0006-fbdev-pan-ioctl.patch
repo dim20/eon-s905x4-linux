@@ -1,0 +1,161 @@
+diff --git a/drivers/amlogic/drm/meson_fbdev.c b/drivers/amlogic/drm/meson_fbdev.c
+index fdc44002e..4e21daf87 100644
+--- a/drivers/amlogic/drm/meson_fbdev.c
++++ b/drivers/amlogic/drm/meson_fbdev.c
+@@ -16,6 +16,16 @@
+ #include "meson_gem.h"
+ #include "meson_fb.h"
+ #include "meson_fbdev.h"
++
++/*
++ * This tree's uapi/linux/fb.h has been trimmed: it defines the vendor's
++ * FBIOPAN_DISPLAY (0x4606) but not the standard FBIO_PAN_DISPLAY, which
++ * is what userspace - and the kernel's own fbdev core - actually sends.
++ * _IOW('F', 0x19, struct fb_var_screeninfo) is 0x4619.
++ */
++#ifndef FBIO_PAN_DISPLAY
++#define FBIO_PAN_DISPLAY 0x4619
++#endif
+ #include "meson_plane.h"
+ 
+ #define PREFERRED_BPP		32
+@@ -139,14 +149,31 @@ static int am_meson_fbdev_mmap(struct fb_info *info,
+ 	meson_gem = container_of(fbdev->fb_gem,
+ 				 struct am_meson_gem_object, base);
+ 
++	/* DEBUG: is the mmap the same memory the write path uses? */
++	DRM_INFO("fbdev mmap: gem=%p screen_base=%p pgoff=%lu len=%lu\n",
++		 (void *)fbdev->fb_gem, (void *)info->screen_base,
++		 (unsigned long)vma->vm_pgoff,
++		 (unsigned long)(vma->vm_end - vma->vm_start));
++
+ 	return am_meson_gem_object_mmap(meson_gem, vma);
+ }
+ 
+ static int am_meson_drm_fbdev_sync(struct fb_info *info)
+ {
++	/* DEBUG: the write path calls this. If this never fires when the X
++	 * server draws, the framebuffer is never handed to the display. */
++	DRM_INFO("fbdev sync\n");
+ 	return 0;
+ }
+ 
++/**
++ * am_meson_drm_fbdev_ioctl - implementation for ->fb_ioctl
++ * @info: fb_info structure
++ * @cmd: ioctl command
++ * @arg: argument
++ *
++ * Return: 0 on success or a negative errno code on failure
++ */
+ static int am_meson_drm_fbdev_ioctl(struct fb_info *info,
+ 				    unsigned int cmd, unsigned long arg)
+ {
+@@ -173,6 +200,26 @@ static int am_meson_drm_fbdev_ioctl(struct fb_info *info,
+ 			drm_wait_one_vblank(helper->dev, plane->crtc->index);
+ 		else
+ 			DRM_DEBUG("crtc is not set for plane [%d]\n", plane->index);
++	} else if (cmd == FBIO_PAN_DISPLAY || cmd == FBIOPAN_DISPLAY) {
++		/*
++		 * Hand the framebuffer to the display.
++		 *
++		 * This ioctl is how the framebuffer's contents are pushed
++		 * out: the kernel's fbdev core calls ->fb_pan_display,
++		 * which commits the plane's framebuffer update. The X
++		 * server draws into the framebuffer's mmap and never writes
++		 * to it, so without this there is no path at all by which
++		 * what it drew could reach the screen: the desktop's
++		 * background and panel appeared (they were flushed at the
++		 * mode set) and nothing drawn afterwards did.
++		 *
++		 * Both numbers are handled: this tree's fb.h only has the
++		 * vendor's FBIOPAN_DISPLAY (0x4606), while the standard
++		 * FBIO_PAN_DISPLAY (0x4619) is what userspace - and the
++		 * kernel's own fbdev core - actually sends.
++		 */
++		if (info->fbops->fb_pan_display)
++			ret = info->fbops->fb_pan_display(&info->var, info);
+ 	}
+ 
+ 	DRM_DEBUG("am_meson_drm_fbdev_ioctl CMD   [%x] - [%d] OUT\n", cmd, plane->index);
+@@ -427,6 +474,9 @@ static int am_meson_drm_fb_pan_display(struct fb_var_screeninfo *var,
+ 	if (plane == mode_set->crtc->cursor)
+ 		state->legacy_cursor_update = true;
+ 
++	/* DEBUG: the flush. Does this ever run when the X server draws? */
++	DRM_INFO("fbdev flush: committing the plane update\n");
++
+ 	ret = drm_atomic_commit(state);
+ 	if (ret != 0)
+ 		goto fail;
+@@ -572,10 +622,23 @@ static int am_meson_drm_fbdev_probe(struct drm_fb_helper *helper,
+ 	am_meson_drm_fbdev_modeset_create(helper);
+ 
+ 	drm_mode_get_hv_timing(&fbdev->modeset.crtc->mode, &hdisplay, &vdisplay);
++	if (!hdisplay || !vdisplay) {
++		/*
++		 * The CRTC has not been given a mode yet, so the timing is
++		 * zero. Fall back to the framebuffer's own geometry: the
++		 * surface is the visible area, the virtual area is the
++		 * double-buffered surface. Leaving these at zero makes the
++		 * framebuffer console believe the display is 0x0, and the
++		 * plane is then programmed with a zero-sized source, so
++		 * nothing is ever scanned out.
++		 */
++		hdisplay = sizes.surface_width;
++		vdisplay = sizes.surface_height / 2;
++	}
+ 	fbi->var.xres = hdisplay;
+ 	fbi->var.yres = vdisplay;
+-	fbi->var.xres_virtual = hdisplay;
+-	fbi->var.yres_virtual = vdisplay * 2;
++	fbi->var.xres_virtual = sizes.surface_width;
++	fbi->var.yres_virtual = sizes.surface_height;
+ 
+ 	return 0;
+ 
+@@ -722,6 +785,15 @@ int am_meson_drm_fbdev_init(struct drm_device *dev)
+ 	if (drmdev->primary_plane) {
+ 		fbdev = am_meson_create_drm_fbdev(dev, drmdev->primary_plane);
+ 		fbdev->zorder = OSD_PLANE_BEGIN_ZORDER;
++		/*
++		 * This is the framebuffer that is scanned out to the display,
++		 * so it is the one the text console belongs to. Say so
++		 * explicitly: without it the console binds to whichever
++		 * framebuffer registered first, which is one of the OSD
++		 * overlays, and those are not CPU-accessible.
++		 */
++		if (fbdev->base.fbdev)
++			fbdev->base.fbdev->flags |= FBINFO_PRIMARY;
+ 		DRM_INFO("create fbdev for primary plane [%p]\n", fbdev);
+ 	}
+ 
+@@ -734,10 +806,24 @@ int am_meson_drm_fbdev_init(struct drm_device *dev)
+ 		if (osd_plane->base.type == DRM_PLANE_TYPE_PRIMARY)
+ 			continue;
+ 
+-		fbdev = am_meson_create_drm_fbdev(dev, &osd_plane->base);
+-		fbdev->zorder = OSD_PLANE_BEGIN_ZORDER + fbdev_cnt;
+-		fbdev_cnt++;
+-		DRM_INFO("create fbdev for plane [%d]-[%p]\n", osd_plane->plane_index, fbdev);
++		/*
++		 * Do not expose the OSD overlays as framebuffers at all.
++		 *
++		 * They are not CPU-accessible: the overlay lives in the VPU's
++		 * own memory and is composited by hardware, so a framebuffer
++		 * on one of these planes can never be read or written by
++		 * anything. (That is the same reason the text console has to
++		 * be pointed at the "primary plane" framebuffer instead - see
++		 * the FBINFO_PRIMARY flag above.)
++		 *
++		 * Exposing them anyway is actively harmful: they register
++		 * first, so anything that probes for a framebuffer finds one
++		 * of these rather than the real one, and then draws into
++		 * memory it cannot reach. The X server's fbdev driver did
++		 * exactly that and the television stayed black.
++		 */
++		DRM_INFO("skipping the fbdev for the OSD plane [%d]\n",
++			 osd_plane->plane_index);
+ 	}
+ 
+ 	DRM_INFO("%s create %d out\n", __func__, fbdev_cnt);
