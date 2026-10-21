@@ -1,0 +1,152 @@
+The X server's screen visual must be as deep as the framebuffer
+
+This is the fbdev X driver (xserver-xorg-video-fbdev), not the kernel
+driver.
+
+THE PROBLEM
+
+The X server's screen visual is 24 bits deep inside a 32-bit
+framebuffer, and the X server's own rasteriser - the font engine, and
+the mouse pointer - then writes three bytes to a pixel into a
+framebuffer that stores four. Everything a CLIENT draws comes out
+right; everything the server rasterises itself comes out sheared and
+repeated, and the text and the pointer are unreadable.
+
+Measured on this box: the glyphs repeat every 640 pixels, where the
+framebuffer's stride is 1920. The X server's own view of the screen is
+perfect - an xwd of the root window has the text once - and the
+framebuffer has it three times.
+
+WHY THE VISUAL IS 24 BITS DEEP
+
+fbdevHWGetDepth() returns the sum of the colour lengths:
+
+    return fPtr->var.red.length + fPtr->var.green.length +
+           fPtr->var.blue.length;
+
+For an ARGB8888 framebuffer that is 8+8+8 = 24. The alpha is not
+counted, so a framebuffer with an alpha channel gets a visual that is
+four bits too shallow.
+
+AND WHY THE DRIVER CANNOT SIMPLY ASK FOR 32
+
+xf86SetWeight() has no case for depth 32. It leaves the weights at
+zero and then refuses, because it sums the colour weights and the
+framebuffer's alpha is not one of them:
+
+    (EE) FBDEV(0): Weight given (000) is inconsistent with the depth (32)
+    (EE) Fatal server error: no screens found
+
+So this patch sets the weights, the offsets and the masks itself, from
+the framebuffer's own variable - which the driver has to read for
+itself, because the fbdevhw library keeps its copy private.
+
+NOTE: with the depth at 32 and the visual still carrying three masks,
+the X server CRASHES: a 32-bit screen with a 24-bit visual is
+inconsistent. So this patch is the first half of the fix; the second
+half is a real ARGB visual (four masks, and alphaBits), which the
+server also wants before the compositor can blend anything.
+
+--- a/src/fbdev.c
++++ b/src/fbdev.c
+@@ -33,6 +33,8 @@
+ #include "xf86xv.h"
+ 
+ #include "compat-api.h"
++#include <linux/fb.h>
++#include <sys/ioctl.h>
+ 
+ #ifdef XSERVER_LIBPCIACCESS
+ #include <pciaccess.h>
+@@ -186,6 +188,7 @@
+ 	int				rotate;
+ 	Bool				shadowFB;
+         Bool                            shadow24;
++	struct fb_var_screeninfo	fbvar;
+ 	void				*shadow;
+ 	CloseScreenProcPtr		CloseScreen;
+ 	CreateScreenResourcesProcPtr	CreateScreenResources;
+@@ -419,6 +422,22 @@
+ 	return foundScreen;
+ }
+ 
++/*
++ * The framebuffer's own colour layout.
++ *
++ * The fbdevhw library keeps the framebuffer's var in a private
++ * record, so the driver reads it itself.
++ */
++static void
++fbdevGetVar(ScrnInfoPtr pScrn, struct fb_var_screeninfo *var)
++{
++	int fd = fbdevHWGetFD(pScrn);
++
++	memset(var, 0, sizeof(*var));
++	if (fd >= 0 && ioctl(fd, FBIOGET_VSCREENINFO, var) < 0)
++		memset(var, 0, sizeof(*var));
++}
++
+ static Bool
+ FBDevPreInit(ScrnInfoPtr pScrn, int flags)
+ {
+@@ -463,8 +482,25 @@
+ 			 xf86FindOptionValue(fPtr->pEnt->device->options,
+ 					     "fbdev")))
+ 		return FALSE;
++	fbdevGetVar(pScrn, &fPtr->fbvar);
+ 	default_depth = fbdevHWGetDepth(pScrn,&fbbpp);
+ 
++	/*
++	 * A framebuffer with an alpha channel wants a 32-bit visual.
++	 *
++	 * fbdevHWGetDepth() returns the sum of the colour lengths, and
++	 * for an ARGB8888 framebuffer that is 8+8+8 = 24 - the alpha is
++	 * not counted. A 24-bit visual in a 32-bit framebuffer is the
++	 * normal case, and everything a CLIENT draws comes out right,
++	 * but the X server's own rasteriser then writes its glyphs three
++	 * bytes to a pixel into a framebuffer that stores four, and the
++	 * text and the mouse pointer come out unreadable.
++	 *
++	 * So: if the framebuffer has an alpha channel, ask for 32 bits.
++	 */
++	if (fbbpp == 32 && fPtr->fbvar.transp.length)
++		default_depth = 32;
++
+ 	if (default_depth == 8) do {
+ 	    /* trust the command line */
+ 	    if (xf86FbBpp > 0 || xf86Depth > 0)
+@@ -504,7 +540,33 @@
+ 	/* color weight */
+ 	if (pScrn->depth > 8) {
+ 		rgb zeros = { 0, 0, 0 };
+-		if (!xf86SetWeight(pScrn, zeros, zeros))
++		if (pScrn->depth == 32) {
++			/*
++			 * xf86SetWeight() has no case for depth 32: it
++			 * leaves the weights at zero and then refuses,
++			 * because it sums the colour weights and the
++			 * framebuffer's alpha is not one of them:
++			 *
++			 *   (EE) FBDEV(0): Weight given (000) is
++			 *   inconsistent with the depth (32)
++			 *
++			 * Set the weights, the offsets and the masks
++			 * ourselves, from the framebuffer.
++			 */
++			pScrn->weight.red = fPtr->fbvar.red.length;
++			pScrn->weight.green = fPtr->fbvar.green.length;
++			pScrn->weight.blue = fPtr->fbvar.blue.length;
++			pScrn->offset.red = fPtr->fbvar.red.offset;
++			pScrn->offset.green = fPtr->fbvar.green.offset;
++			pScrn->offset.blue = fPtr->fbvar.blue.offset;
++			pScrn->mask.red = ((1 << fPtr->fbvar.red.length) - 1)
++			    << fPtr->fbvar.red.offset;
++			pScrn->mask.green = ((1 << fPtr->fbvar.green.length) - 1)
++			    << fPtr->fbvar.green.offset;
++			pScrn->mask.blue = ((1 << fPtr->fbvar.blue.length) - 1)
++			    << fPtr->fbvar.blue.offset;
++			pScrn->rgbBits = fPtr->fbvar.red.length;
++		} else if (!xf86SetWeight(pScrn, zeros, zeros))
+ 			return FALSE;
+ 	}
+ 
