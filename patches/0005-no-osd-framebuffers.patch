@@ -1,3 +1,5 @@
+
+diff --git a/drivers/amlogic/drm/meson_fbdev.c b/drivers/amlogic/drm/meson_fbdev.c
 --- a/drivers/amlogic/drm/meson_fbdev.c
 +++ b/drivers/amlogic/drm/meson_fbdev.c
 @@ -756,10 +756,24 @@
@@ -29,15 +31,38 @@
  	}
  
  	DRM_INFO("%s create %d out\n", __func__, fbdev_cnt);
+diff --git a/drivers/amlogic/media/osd/osd_fb.c b/drivers/amlogic/media/osd/osd_fb.c
 --- a/drivers/amlogic/media/osd/osd_fb.c
 +++ b/drivers/amlogic/media/osd/osd_fb.c
-@@ -5502,9 +5502,8 @@
- 		 * planes, and by this driver's own ioctl interface; only
- 		 * the /dev/fbN alias for it goes away.
- 		 */
+@@ -5480,9 +5480,30 @@
+ 			set_default_display_axis(&fbdev->fb_info->var,
+ 						 &fbdev->osd_ctl, vinfo);
+ 		osd_check_var(var, fbi);
 -		/* register frame buffer */
 -		if (register_framebuffer(fbi))
 -			osd_log_err("%s reg_fb failed\n", __func__);
++		/*
++		 * Do NOT register the OSD overlay as a framebuffer.
++		 *
++		 * An OSD overlay lives in the VPU's own memory and is
++		 * composited by the hardware, so it is not CPU-accessible:
++		 * nothing can read or write it. Registering it anyway is
++		 * actively harmful, because these register FIRST - anything
++		 * that probes for a framebuffer finds an "OSD FB" rather
++		 * than the real one, and then draws into memory it cannot
++		 * reach.
++		 *
++		 *   - the text console bound to one of them, until the
++		 *     FBINFO_PRIMARY flag taught fbcon to prefer the real
++		 *     one;
++		 *   - the X server's fbdev driver did exactly that, and the
++		 *     television stayed black while Xorg ran happily and
++		 *     reported no errors at all.
++		 *
++		 * The overlay is still driven by the DRM driver's OSD
++		 * planes, and by this driver's own ioctl interface; only
++		 * the /dev/fbN alias for it goes away.
++		 */
 +		osd_log_info("not registering the OSD overlay %d as a framebuffer\n",
 +			     index);
  		/* create device attribute files */

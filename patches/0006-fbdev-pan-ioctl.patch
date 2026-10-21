@@ -7,15 +7,22 @@ sends.
 
 The driver's .fb_ioctl handles exactly two ioctls, FBIOGET_OSD_DMABUF and
 FBIO_WAITFORVSYNC, and returns 0 for everything else. So the standard
-pan - the only way to hand the framebuffer's contents to the display -
-was silently ignored, and there was no path at all by which an X server's
-drawing could reach the screen. It draws into the framebuffer's mmap and
-never writes to it, so nothing ever triggered the flush: the desktop's
-background and panel appeared (they were flushed at the mode set) and
-nothing drawn afterwards did.
+pan - the one userspace and the kernel's own fbdev core actually send -
+was silently ignored, and the driver answered "fine" while doing
+nothing.
 
 Both numbers are now handled, and both call ->fb_pan_display, which
 commits the plane's framebuffer update.
+
+NOTE, because this patch was originally justified wrongly and the
+error is worth recording: it used to say that this was "the only way to
+hand the framebuffer's contents to the display", and that without it
+"nothing drawn afterwards" could reach the screen. That is not true.
+The display scans the framebuffer live - it is proved in
+docs/framebuffer.md - so an X server's drawing reaches the television
+without any pan at all. The ioctl was still being swallowed, and that
+is still a bug, but the symptom it was blamed for came from somewhere
+else.
 
 diff --git a/drivers/amlogic/drm/meson_fbdev.c b/drivers/amlogic/drm/meson_fbdev.c
 --- a/drivers/amlogic/drm/meson_fbdev.c

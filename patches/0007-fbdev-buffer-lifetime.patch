@@ -1,0 +1,300 @@
+The framebuffer's buffer belongs to the framebuffer, not to the open file
+
+The vendor's DRM framebuffer emulation frees the framebuffer's buffer
+when the last user closes /dev/fb0. That is wrong in two ways, and both
+of them show up on the television.
+
+The plane may still be reading it. The plane's address is programmed
+when the framebuffer's contents are committed, and nothing undoes that
+when the file is closed, so the display went on reading memory that had
+been handed back to the allocator.
+
+The next open has to find it at the SAME address. Because the buffer
+was freed, the next open allocated a new one - usually at a different
+address - while the plane still pointed at the old one. The display
+therefore showed the OLD buffer, which is what "the display shows a
+stale frame" looks like from the outside, while the client that had
+just drawn into the new one saw nothing.
+
+What this patch does:
+
+  * the buffer is unmapped when the file is closed, but not freed: it
+    belongs to the framebuffer, and it is freed when the framebuffer
+    goes away;
+
+  * a buffer that is being replaced - because the geometry changed -
+    is retired rather than freed, because the plane may still be
+    reading it. The plane's address is only recomputed on a commit, so
+    the old buffer is kept until the framebuffer goes away;
+
+  * the framebuffer's own destroy is not allowed to touch the buffer
+    a second time;
+
+  * the "force_free_mem" debug attribute now takes the plane off the
+    display before the memory goes back to the allocator;
+
+  * the dma-buf reference is taken when the buffer is mapped, so that
+    every unmap has one to give back.
+
+The framebuffer's buffer was also never actually freed by the old code
+- the check for "somebody else still has it mapped" always found the
+mapping the mode set had taken, so the buffer leaked. It is freed now.
+diff --git a/drivers/amlogic/drm/meson_fbdev.c b/drivers/amlogic/drm/meson_fbdev.c
+--- a/drivers/amlogic/drm/meson_fbdev.c
++++ b/drivers/amlogic/drm/meson_fbdev.c
+@@ -62,6 +62,12 @@
+ 		info->screen_base = (char __iomem *)vaddr;
+ 		info->fix.smem_start = meson_gem->addr;
+ 		info->fix.smem_len = size;
++		/*
++		 * One reference for this mapping, so that every unmap
++		 * has one to give back: the mapping is taken at the mode
++		 * set and again at every open.
++		 */
++		get_dma_buf(meson_gem->dmabuf);
+ 
+ 		DRM_DEBUG("alloc memory %d done\n", (u32)size);
+ 	} else {
+@@ -75,12 +81,51 @@
+ 	return 0;
+ }
+ 
++/*
++ * am_meson_fbdev_unmap_fb_gem - unmap the framebuffer's buffer
++ * @info: fb_info structure
++ *
++ * The buffer itself is NOT freed here. It belongs to the framebuffer,
++ * not to the open file - see am_meson_fbdev_release() for why that
++ * matters.
++ */
++static void am_meson_fbdev_unmap_fb_gem(struct fb_info *info)
++{
++	struct drm_fb_helper *helper = info->par;
++	struct meson_drm_fbdev *fbdev;
++	struct am_meson_gem_object *meson_gem;
++
++	if (!helper) {
++		DRM_ERROR("fb helper is NULL!\n");
++		return;
++	}
++
++	fbdev = container_of(helper, struct meson_drm_fbdev, base);
++	if (!fbdev || !fbdev->fb_gem)
++		return;
++
++	meson_gem = container_of(fbdev->fb_gem, struct am_meson_gem_object, base);
++
++	dma_buf_put(meson_gem->dmabuf);
++	ion_buffer_kmap_put(meson_gem->ionbuffer);
++
++	info->screen_base = NULL;
++}
++
++/*
++ * am_meson_fbdev_free_fb_gem - free the framebuffer's buffer
++ * @info: fb_info structure
++ *
++ * Only safe where the plane cannot be reading the buffer any more.
++ * Everywhere else, unmap it and keep it.
++ */
+ static void am_meson_fbdev_free_fb_gem(struct fb_info *info)
+ {
+ 	struct drm_fb_helper *helper = info->par;
+ 	struct meson_drm_fbdev *fbdev;
+ 	struct drm_framebuffer *fb;
+ 	struct am_meson_fb *meson_fb;
++	struct am_meson_gem_object *meson_gem;
+ 
+ 	if (!helper) {
+ 		DRM_ERROR("fb helper is NULL!\n");
+@@ -88,37 +133,65 @@
+ 	}
+ 
+ 	fbdev = container_of(helper, struct meson_drm_fbdev, base);
+-	if (fbdev && fbdev->fb_gem) {
+-		struct drm_gem_object *gem_obj = fbdev->fb_gem;
+-		struct am_meson_gem_object *meson_gem = container_of(gem_obj,
+-					struct am_meson_gem_object, base);
+-
+-		dma_buf_put(meson_gem->dmabuf);
+-		ion_buffer_kmap_put(meson_gem->ionbuffer);
+-
+-		if (meson_gem->ionbuffer->kmap_cnt)
+-			return;
+-
+-		info->screen_base = NULL;
+-
+-		am_meson_gem_object_free(fbdev->fb_gem);
+-		fbdev->fb_gem = NULL;
+-
+-		fb = helper->fb;
+-		if (fb) {
+-			meson_fb = container_of(fb, struct am_meson_fb, base);
+-			if (meson_fb)
+-				meson_fb->bufp[0] = NULL;
+-			else
+-				DRM_ERROR("meson_fb is NULL!\n");
+-		} else {
+-			DRM_ERROR("drm framebuffer is NULL!\n");
+-		}
+-
+-		DRM_DEBUG("free memory done\n");
++	if (!fbdev || !fbdev->fb_gem) {
++		DRM_DEBUG("memory already free before\n");
++		return;
++	}
++
++	meson_gem = container_of(fbdev->fb_gem, struct am_meson_gem_object, base);
++
++	am_meson_fbdev_unmap_fb_gem(info);
++
++	/* Somebody else still has it mapped: leave it alone. */
++	if (meson_gem->ionbuffer->kmap_cnt)
++		return;
++
++	am_meson_gem_object_free(fbdev->fb_gem);
++	fbdev->fb_gem = NULL;
++
++	fb = helper->fb;
++	if (fb) {
++		meson_fb = container_of(fb, struct am_meson_fb, base);
++		if (meson_fb)
++			meson_fb->bufp[0] = NULL;
++		else
++			DRM_ERROR("meson_fb is NULL!\n");
+ 	} else {
+-		DRM_DEBUG("memory already free before\n");
+-	}
++		DRM_ERROR("drm framebuffer is NULL!\n");
++	}
++
++	DRM_DEBUG("free memory done\n");
++}
++
++/*
++ * am_meson_fbdev_retire_fb_gem - keep the buffer the plane may still be
++ *	reading, instead of freeing it
++ * @fbdev: the fbdev
++ * @info: fb_info structure
++ *
++ * The plane's address is only recomputed on a commit, so a buffer that
++ * is being replaced may still be the one the display is reading. It is
++ * kept until the framebuffer goes away.
++ */
++static void am_meson_fbdev_retire_fb_gem(struct meson_drm_fbdev *fbdev,
++					 struct fb_info *info)
++{
++	if (!fbdev->fb_gem)
++		return;
++
++	/*
++	 * If there is already a spare, it is at least one mode set old,
++	 * so the plane has moved off it by now.
++	 */
++	if (fbdev->spare_gem) {
++		am_meson_gem_object_free(fbdev->spare_gem);
++		fbdev->spare_gem = NULL;
++	}
++
++	am_meson_fbdev_unmap_fb_gem(info);
++
++	fbdev->spare_gem = fbdev->fb_gem;
++	fbdev->fb_gem = NULL;
+ }
+ 
+ static int am_meson_fbdev_open(struct fb_info *info, int arg)
+@@ -135,7 +208,23 @@
+ 
+ static int am_meson_fbdev_release(struct fb_info *info, int arg)
+ {
+-	am_meson_fbdev_free_fb_gem(info);
++	/*
++	 * Unmap the buffer, but do NOT free it.
++	 *
++	 * The buffer belongs to the framebuffer, not to the open file:
++	 *
++	 *   - the plane may still be reading it, and freeing it left the
++	 *     display reading memory that had been handed back to the
++	 *     allocator;
++	 *   - the next open has to find it at the SAME address, because
++	 *     the plane's address is only recomputed on a commit. A new
++	 *     buffer, probably at a different address, left the display
++	 *     showing the OLD one - a stale frame - while the new client
++	 *     drew into the new one.
++	 *
++	 * It is freed when the framebuffer goes away.
++	 */
++	am_meson_fbdev_unmap_fb_gem(info);
+ 	return 0;
+ }
+ 
+@@ -366,8 +455,13 @@
+ 		drm_fb_helper_fill_info(info, fb_helper, &sizes);
+ 
+ 		if (fb_gem && fb_gem->size < info->fix.smem_len) {
+-			DRM_DEBUG("GEM SIZE is not enough, no re-allocate.\n");
+-			am_meson_fbdev_free_fb_gem(info);
++			DRM_DEBUG("GEM SIZE is not enough, re-allocate.\n");
++			/*
++			 * The plane may still be reading the buffer that is
++			 * being replaced - its address is only recomputed
++			 * on a commit - so keep it rather than free it.
++			 */
++			am_meson_fbdev_retire_fb_gem(fbdev, info);
+ 			fb_gem = NULL;
+ 		}
+ 
+@@ -671,6 +765,12 @@
+ 	struct fb_info *fb_info = dev_get_drvdata(device);
+ 
+ 	if (strncmp("1", buf, 1) == 0) {
++		/*
++		 * The plane may still be reading this buffer, so take it
++		 * off the display before the memory goes back to the
++		 * allocator.
++		 */
++		am_meson_drm_fb_blank(FB_BLANK_NORMAL, fb_info);
+ 		am_meson_fbdev_free_fb_gem(fb_info);
+ 		DRM_INFO("fb mem is freed !\n");
+ 	}
+@@ -848,6 +948,24 @@
+ 			}
+ 		}
+ 
++		/*
++		 * The framebuffer's buffer goes away with the
++		 * framebuffer, and not before: the plane may still be
++		 * reading it. Freeing it here also stops the framebuffer's
++		 * own destroy from touching it a second time.
++		 *
++		 * This has to happen BEFORE drm_fb_helper_fini(), which
++		 * releases the fbdev and so unmaps the buffer; unmapping
++		 * it twice would drop the dma-buf and the ION mapping's
++		 * references twice.
++		 */
++		if (fbinfo)
++			am_meson_fbdev_free_fb_gem(fbinfo);
++		if (fbdev->spare_gem) {
++			am_meson_gem_object_free(fbdev->spare_gem);
++			fbdev->spare_gem = NULL;
++		}
++
+ 		drm_fb_helper_unregister_fbi(helper);
+ 		drm_fb_helper_fini(helper);
+ 		if (helper->fb)
+diff --git a/drivers/amlogic/drm/meson_fbdev.h b/drivers/amlogic/drm/meson_fbdev.h
+--- a/drivers/amlogic/drm/meson_fbdev.h
++++ b/drivers/amlogic/drm/meson_fbdev.h
+@@ -36,6 +36,12 @@
+ 	struct drm_plane *plane;
+ 	//struct am_meson_fb * fb;
+ 	struct drm_gem_object *fb_gem;
++	/*
++	 * A buffer that was replaced but that the plane may still be
++	 * reading: the plane's address is only recomputed on a commit.
++	 * It is freed when the framebuffer goes away.
++	 */
++	struct drm_gem_object *spare_gem;
+ 	struct drm_mode_set modeset;
+ 	u32 zorder;
+ 	bool blank;
