@@ -92,6 +92,43 @@ made convincing.
 
 ## The bugs that are real
 
+### The physical address in `fix.smem_start` — the big one
+
+`patches/0008-fbdev-smem-start.patch`.
+
+The DRM's own framebuffer helper deliberately does **not** put the
+physical address of the framebuffer in `fix.smem_start`. It only does
+so under `CONFIG_DRM_FBDEV_LEAK_PHYS_SMEM`, and then only if the field
+is still zero:
+
+    /* Shamelessly leak the physical address to user-space */
+    #if IS_ENABLED(CONFIG_DRM_FBDEV_LEAK_PHYS_SMEM)
+            if (drm_leak_fbdev_smem && fbi->fix.smem_start == 0)
+                    fbi->fix.smem_start =
+                            page_to_phys(virt_to_page(fbi->screen_buffer));
+    #endif
+
+That is not squeamishness. **The X server's fbdev driver treats
+`fix.smem_start` as an offset into its own mapping of `/dev/fb0`, not
+as a physical address:**
+
+    fPtr->fboff = (unsigned long) fPtr->fix.smem_start & ~PAGE_MASK;
+    fPtr->fbmem_len = (fPtr->fboff + fPtr->fix.smem_len + ~PAGE_MASK)
+                      & PAGE_MASK;
+    ...
+    fPtr->fbstart = fPtr->fbmem + fPtr->fboff;
+
+With the physical address in that field — `0x77ff0000` on this box —
+the X server's screen pixmap landed **two gigabytes** past the start of
+its mapping, and everything it drew went there instead of into the
+framebuffer. The television showed a stale picture, and the parts of it
+that X had drawn were moiré'd, because what was there was the remains
+of something else.
+
+With the field left at zero — which is what the DRM does — the X
+server's screen pixmap *is* the framebuffer, and the desktop and its
+windows appear.
+
 ### The framebuffer's buffer belongs to the framebuffer
 
 `patches/0007-fbdev-buffer-lifetime.patch`.
@@ -114,6 +151,29 @@ The patch unmaps the buffer when the file is closed but does not free
 it, retires a buffer that is being replaced rather than freeing it
 while the plane may still be reading it, and frees it when the
 framebuffer goes away.
+
+### What is still wrong
+
+The desktop, its windows and their backgrounds now reach the television.
+**The text does not**: the glyphs are copied into the framebuffer with
+the wrong stride, and repeat every 652 pixels where they should be
+written once. The window's background and border are correct; only the
+glyphs are wrong, which means they are drawn by a different mechanism
+— the X server's font engine, rather than the client — and reach the
+framebuffer by a different path.
+
+Two more symptoms in the same area:
+
+* the mouse pointer vanishes over the terminal windows;
+* the terminal started from the XFCE menu comes up blank, with no
+  shell, while the same `xterm` started from a shell works. That one
+  smells like a missing font rather than a missing stride: a terminal
+  with no font can draw its background and its border and nothing else.
+
+The tools in `scripts/fbtools/` answer all three: `fbhash` says
+whether the framebuffer changed, `fbhalves` and `fbregion` show what
+is in it, and `fbraw` compares the kernel's view of the memory with
+userspace's.
 
 ### The build script was dropping an option
 
