@@ -70,19 +70,29 @@ CONFIG_FRAMEBUFFER_CONSOLE_DETECT_PRIMARY=y
 # WHY: fbcon must not take the console over at the moment the framebuffers
 # register.
 #
-# Upstream defers the takeover until the first text is displayed on the
-# console, and that is exactly what is needed here: the vendor's DRM
-# framebuffer is created during probe, before the HDMI pipeline is up, and
-# taking the console over at that point programs a mode set that the vendor
-# atomic-commit path cannot satisfy (it waits for a vblank that never
-# arrives - see the vblank bug).
+# The vendor's DRM framebuffer is created during probe, before the HDMI
+# pipeline is up, and taking the console over at that point programs a
+# mode set the vendor's atomic-commit path cannot satisfy - it waits for
+# a vblank that never arrives.
 #
-# With the option on, fbcon registers and waits. The takeover then happens
-# when agetty writes the login prompt to the virtual terminal, which is
-# after the display is live.
+# With the option on, fbcon registers and waits, and the take-over
+# happens later, when the display pipeline is live.
+#
+# WHY IT NEEDED A FIX (patches/0010)
+#
+# The take-over is deferred to a workqueue, and the workqueue is
+# scheduled by a notifier that fires when the dummy console is written
+# to. The dummy console is only the preferred one until a real console
+# registers, so that notifier fires early - and if the work runs before
+# the DRM's framebuffer has registered, it finds nothing to take over
+# and nothing ever reschedules it. The console then never takes the
+# display over, and /proc/consoles lists only the serial port.
+#
+# patches/0010 reschedules the work when a framebuffer registers, so it
+# always runs after the framebuffer it is meant to take over.
 #
 # NOTE: on this architecture fb_is_primary_device() returns 0, so
 # DETECT_PRIMARY on its own does nothing; the framebuffer console is bound
 # to the right device because the vendor driver marks its primary-plane
-# framebuffer FBINFO_PRIMARY - see patches/0003.
+# framebuffer FBINFO_PRIMARY - see patches/0003 and patches/0009.
 CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER=y

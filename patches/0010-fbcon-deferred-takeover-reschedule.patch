@@ -1,0 +1,127 @@
+The deferred console take-over has to be rescheduled when a framebuffer registers
+
+The take-over is deferred to a workqueue, and the workqueue is
+scheduled by a notifier that fires when the dummy console is written
+to. The dummy console is only the preferred console until a real one
+registers, so that notifier fires early - and if the work runs before
+the DRM's framebuffer has registered, it finds nothing to take over.
+Nothing ever reschedules it, and the console never takes the display
+over: /proc/consoles lists only the serial port, and the television
+shows whatever was last in the framebuffer.
+
+So the work is scheduled again when a framebuffer registers, where it
+is guaranteed to run after the framebuffer it is meant to take over.
+The work clears the deferred flag and walks the registered
+framebuffers, so the take-over then happens properly.
+diff --git a/drivers/video/fbdev/core/fbcon.c b/drivers/video/fbdev/core/fbcon.c
+--- a/drivers/video/fbdev/core/fbcon.c
++++ b/drivers/video/fbdev/core/fbcon.c
+@@ -2975,6 +2975,41 @@
+ }
+ #endif /* CONFIG_FRAMEBUFFER_DETECT_PRIMARY */
+ 
++#ifdef CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
++static void fbcon_register_existing_fbs(struct work_struct *work)
++{
++	int i;
++
++	console_lock();
++
++	deferred_takeover = false;
++	logo_shown = FBCON_LOGO_DONTSHOW;
++
++	for_each_registered_fb(i)
++		fbcon_fb_registered(registered_fb[i]);
++
++	console_unlock();
++}
++
++static struct notifier_block fbcon_output_nb;
++static DECLARE_WORK(fbcon_deferred_takeover_work, fbcon_register_existing_fbs);
++
++static int fbcon_output_notifier(struct notifier_block *nb,
++				 unsigned long action, void *data)
++{
++	WARN_CONSOLE_UNLOCKED();
++
++	pr_info("fbcon: Taking over console\n");
++
++	dummycon_unregister_output_notifier(&fbcon_output_nb);
++
++	/* We may get called in atomic context */
++	schedule_work(&fbcon_deferred_takeover_work);
++
++	return NOTIFY_OK;
++}
++#endif
++
+ /* called with console_lock held */
+ int fbcon_fb_registered(struct fb_info *info)
+ {
+@@ -2987,6 +3022,25 @@
+ 
+ 	if (deferred_takeover) {
+ 		pr_info("fbcon: Deferring console take-over\n");
++		/*
++		 * Make sure the deferred take-over actually happens.
++		 *
++		 * The take-over is deferred to a workqueue, and the
++		 * workqueue is scheduled by a notifier that fires when
++		 * the dummy console is written to. The dummy console is
++		 * only the preferred one until a real console registers,
++		 * so that notifier fires early - and if the work runs
++		 * before this framebuffer has registered, it finds
++		 * nothing to take over, and nothing ever reschedules it.
++		 * The console then never takes the display.
++		 *
++		 * So schedule the work again here, where it is
++		 * guaranteed to run after this framebuffer is
++		 * registered. The work sets deferred_takeover to false and
++		 * walks the registered framebuffers, so it does the take
++		 * over properly.
++		 */
++		schedule_work(&fbcon_deferred_takeover_work);
+ 		return 0;
+ 	}
+ 
+@@ -3312,40 +3366,6 @@
+ 	return 0;
+ }
+ 
+-#ifdef CONFIG_FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER
+-static void fbcon_register_existing_fbs(struct work_struct *work)
+-{
+-	int i;
+-
+-	console_lock();
+-
+-	deferred_takeover = false;
+-	logo_shown = FBCON_LOGO_DONTSHOW;
+-
+-	for_each_registered_fb(i)
+-		fbcon_fb_registered(registered_fb[i]);
+-
+-	console_unlock();
+-}
+-
+-static struct notifier_block fbcon_output_nb;
+-static DECLARE_WORK(fbcon_deferred_takeover_work, fbcon_register_existing_fbs);
+-
+-static int fbcon_output_notifier(struct notifier_block *nb,
+-				 unsigned long action, void *data)
+-{
+-	WARN_CONSOLE_UNLOCKED();
+-
+-	pr_info("fbcon: Taking over console\n");
+-
+-	dummycon_unregister_output_notifier(&fbcon_output_nb);
+-
+-	/* We may get called in atomic context */
+-	schedule_work(&fbcon_deferred_takeover_work);
+-
+-	return NOTIFY_OK;
+-}
+-#endif
+ 
+ static void fbcon_start(void)
+ {

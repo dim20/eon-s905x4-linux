@@ -1,0 +1,81 @@
+The framebuffer the console binds to has to be marked primary in time
+
+The text console binds to the framebuffer the vendor driver marks
+FBINFO_PRIMARY. The DRM's fbcon helper reads that flag when the
+framebuffer is REGISTERED, and the registration happens inside
+am_meson_create_drm_fbdev() - which is a few lines above where the
+flag used to be set. So the flag was always set after the framebuffer
+carrying it had been registered and judged, and the console never
+bound to it.
+
+It worked by luck of ordering: while the vendor's OSD overlays
+registered first, the DRM's framebuffer registered later, by which time
+the flag had been set. Once the overlays stopped registering - the
+framebuffer is then the only one, and is registered synchronously - the
+flag was always too late and the console stopped taking the display
+over.
+
+So the flag is set in the driver's fb_probe callback, which is where
+the fb_info is created and which runs before the registration, in every
+ordering. The old assignment is removed, so that there is one place
+that sets it and it is the place that is early enough.
+diff --git a/drivers/amlogic/drm/meson_fbdev.c b/drivers/amlogic/drm/meson_fbdev.c
+--- a/drivers/amlogic/drm/meson_fbdev.c
++++ b/drivers/amlogic/drm/meson_fbdev.c
+@@ -726,6 +726,36 @@
+ 	fbi->screen_size = fb->pitches[0] * fb->height;
+ 	fbi->fix.smem_len = fbi->screen_size;
+ 
++	/*
++	 * This is the framebuffer that is scanned out to the display, so
++	 * it is the one the text console belongs to. Say so explicitly:
++	 * without it the console binds to whichever framebuffer
++	 * registered first, and the vendor's OSD overlays are not
++	 * CPU-accessible - the console's blitter would write to an
++	 * unmapped address and the machine would oops.
++	 *
++	 * IT HAS TO BE SET HERE, in the probe, and not in
++	 * am_meson_drm_fbdev_init(). The probe is what creates this
++	 * fb_info, and drm_fb_helper_probe_complete() calls
++	 * register_framebuffer() on it as soon as the probe returns.
++	 * register_framebuffer() is what calls fbcon_fb_registered(),
++	 * and that is where FBINFO_PRIMARY is read. So a flag set
++	 * after this function returns is too late: the framebuffer has
++	 * already been registered, and judged, without it.
++	 *
++	 * That is not a theoretical problem. It is what broke the
++	 * console: the flag used to be set in the init, a few
++	 * instructions after am_meson_create_drm_fbdev() - which
++	 * registers the framebuffer - returned. It happened to work
++	 * while the OSD overlays registered first, because the DRM's
++	 * framebuffer was then registered later, by which time the
++	 * flag was set. Once the overlays stopped registering (the
++	 * framebuffer is then the only one, and is registered
++	 * synchronously), the flag was always too late and the console
++	 * stopped taking over the display.
++	 */
++	fbi->flags |= FBINFO_PRIMARY;
++
+ 	drm_fb_helper_fill_info(fbi, helper, &sizes);
+ 	am_meson_drm_fbdev_modeset_create(helper);
+ 
+@@ -900,14 +930,12 @@
+ 		fbdev = am_meson_create_drm_fbdev(dev, drmdev->primary_plane);
+ 		fbdev->zorder = OSD_PLANE_BEGIN_ZORDER;
+ 		/*
+-		 * This is the framebuffer that is scanned out to the display,
+-		 * so it is the one the text console belongs to. Say so
+-		 * explicitly: without it the console binds to whichever
+-		 * framebuffer registered first, which is one of the OSD
+-		 * overlays, and those are not CPU-accessible.
++		 * The framebuffer is marked FBINFO_PRIMARY in
++		 * am_meson_drm_fbdev_probe(), which is the only place it
++		 * can be marked in time: the framebuffer is registered
++		 * inside am_meson_create_drm_fbdev(), and the console
++		 * reads the flag when it is registered.
+ 		 */
+-		if (fbdev->base.fbdev)
+-			fbdev->base.fbdev->flags |= FBINFO_PRIMARY;
+ 		DRM_INFO("create fbdev for primary plane [%p]\n", fbdev);
+ 	}
+ 
