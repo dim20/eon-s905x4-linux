@@ -66,9 +66,10 @@ int main(int argc, char **argv)
 			for (i = 0; i < w; i++) {
 				unsigned char *px = row + (size_t)i * bpp;
 				/* BGRX in the framebuffer; PPM wants RGB */
-				fputc(bpp == 4 ? px[2] : px[0], f);
+				/* the framebuffer is XRGB: r,g,b,a in memory */
+				fputc(bpp == 4 ? px[0] : px[0], f);
 				fputc(px[1], f);
-				fputc(bpp == 4 ? px[0] : px[2], f);
+				fputc(bpp == 4 ? px[2] : px[2], f);
 			}
 		}
 		fclose(f);
