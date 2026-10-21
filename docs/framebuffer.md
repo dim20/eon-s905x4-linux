@@ -170,6 +170,34 @@ Two more symptoms in the same area:
   smells like a missing font rather than a missing stride: a terminal
   with no font can draw its background and its border and nothing else.
 
+### The shadows, and why there is no alpha
+
+The compositor's shadows and the semi-transparent button backgrounds
+come out black, and that is not about the GPU.
+
+The X server's fbdev driver sets the visual's colour weights to zero:
+
+    /* color weight */
+    if (pScrn->depth > 8) {
+            rgb zeros = { 0, 0, 0 };
+            if (!xf86SetWeight(pScrn, zeros, zeros))
+                    return FALSE;
+    }
+
+So the X server's screen visual has **no alpha channel**, and the
+compositor blends the shadows against black.
+
+And the fbdev driver **cannot run at depth 32 at all** — asked for it
+with `Option "DefaultDepth" "32"`, the X server refuses to start:
+
+    (**) FBDEV(0): Depth 32, (--) framebuffer bpp 32
+    (EE) FBDEV(0): Weight given (000) is inconsistent with the depth (32)
+    (EE) Fatal server error: no screens found
+
+because `xf86SetWeight()` checks the weights against the depth, and the
+driver has just set them to zero. **The alpha channel is not reachable
+by configuration**; it needs a different X driver, or a patched one.
+
 The tools in `scripts/fbtools/` answer all three: `fbhash` says
 whether the framebuffer changed, `fbhalves` and `fbregion` show what
 is in it, and `fbraw` compares the kernel's view of the memory with
