@@ -1,0 +1,180 @@
+The screen pixmap's bits per pixel must be the screen's, not the depth's
+
+This is the X server's fb library, not the kernel driver.
+
+THE MISTAKE
+
+    fb/fbpixmap.c, fbCreatePixmap():
+
+        int bpp = BitsPerPixel(depth);
+        paddedWidth = ((width * bpp + FB_MASK) >> FB_SHIFT) * sizeof(FbBits);
+
+BitsPerPixel(depth) is how many bits a pixel VALUE occupies. The
+screen's memory is laid out at the screen's bits per pixel, and for a
+depth-24 visual in a 32-bit framebuffer those differ: the value is 24
+bits and the storage is 32.
+
+The pixmap's stride comes from PixmapBytePad(), which uses the
+STORAGE's bytes per pixel - so the stride is right - while the pixmap's
+bitsPerPixel came from the depth. The two disagreed, and everything the
+fb library drew into the screen walked three bytes forward in a
+four-byte row.
+
+THE SYMPTOMS, and they are all one bug:
+
+  * the X server's own dump of the root window said 24 bits per pixel
+    where the framebuffer has 32, and its rows held 2560 pixels of
+    data in a 1920-pixel screen;
+  * the text was unreadable;
+  * the mouse pointer was invisible;
+  * anything translucent came out black, because the alpha byte was
+    never written - which is why the XFCE logout menu was black and
+    the window shadows were wrong.
+
+WHAT THIS PATCH DOES
+
+  * the fb screen private remembers the screen's bits per pixel
+    (fb/fb.h, fb/fbscreen.c);
+  * fbCreatePixmap() uses it for the stride and for the pixmap's
+    bitsPerPixel, and falls back to the depth's when the screen does
+    not know yet;
+  * the root pixmap's bits per pixel is the screen's too
+    (mi/miscrinit.c).
+
+AND WHAT IT DOES NOT DO - the honest part
+
+This is not enough on its own, and the reason is worth recording:
+the fb library also FETCHES and STORES pixel values, and those
+conversions are keyed on the DEPTH. A 24-bit pixel value has to be
+placed in a 32-bit slot with its alpha set, and the code that does
+that (the 24-to-32 conversion) is in a MODULE that this version of the
+X server does not have - upstream calls it fb24_32, and the modesetting
+driver uses it for exactly this case. The fbdev driver does not.
+
+So with this patch alone the screen goes black: the fills write 24-bit
+values into 32-bit slots without the alpha, and the result is
+translucent black.
+
+The complete fix is the fb24_32 conversion, in the fb library or as a
+module, which is what upstream does.
+
+WHAT WAS PROVEN, before the rollback
+
+  * the patch builds (the X server is built on the box; it is aarch64
+    and the build machine is not);
+  * with it, the X server's own dump of the root window reports 32
+    bits per pixel and a 7680-byte stride - which matches the
+    framebuffer exactly, and did not before;
+  * the comparison against the framebuffer went from 272 differing
+    pixels to 103, and all 103 are the mouse pointer, which is a
+    software-cursor overlay and so is not part of the root window at
+    all.
+
+The box was rolled back to the stock X server: the desktop works
+there, and the remaining defect is the one this patch does not finish.
+--- a/fb/fbpixmap.c
++++ b/fb/fbpixmap.c
+@@ -37,7 +37,27 @@
+     size_t paddedWidth;
+     int adjust;
+     int base;
+-    int bpp = BitsPerPixel(depth);
++    /*
++     * The stride is the SCREEN's bytes per pixel, not the depth's.
++     *
++     * BitsPerPixel(depth) is how many bits a pixel VALUE occupies.
++     * The screen's memory is laid out at the screen's bits per pixel,
++     * and for a depth-24 visual in a 32-bit framebuffer those differ:
++     * the value is 24 bits and the storage is 32.
++     *
++     * Using the depth here made the stride and the pixmap's
++     * bitsPerPixel disagree - the stride was right and the pixels were
++     * three bytes wide - so anything the fb library drew into the
++     * pixmap walked three bytes forward in a four-byte row. The text
++     * came out unreadable, the mouse pointer was invisible, and
++     * anything translucent came out black, because the alpha byte
++     * was never written.
++     */
++    FbScreenPrivPtr pScrPriv = fbGetScreenPrivate(pScreen);
++    int bpp = pScrPriv ? pScrPriv->bpp : 0;
++
++    if (!bpp)
++        bpp = BitsPerPixel(depth);
+ 
+     paddedWidth = ((width * bpp + FB_MASK) >> FB_SHIFT) * sizeof(FbBits);
+     if (paddedWidth / 4 > 32767 || height > 32767)
+@@ -58,6 +78,12 @@
+     pPixmap->drawable.class = 0;
+     pPixmap->drawable.pScreen = pScreen;
+     pPixmap->drawable.depth = depth;
++    /*
++     * The pixmap's bits per pixel is the SCREEN's, so that the pixels
++     * the fb library writes are as wide as the row they go in. The
++     * depth stays the depth - that is the visual's depth, and the
++     * pixel values are still depth-bit values.
++     */
+     pPixmap->drawable.bitsPerPixel = bpp;
+     pPixmap->drawable.id = 0;
+     pPixmap->drawable.serialNumber = NEXT_SERIAL_NUMBER;
+--- a/fb/fb.h
++++ b/fb/fb.h
+@@ -410,6 +410,12 @@
+ #endif
+     DevPrivateKeyRec    gcPrivateKeyRec;
+     DevPrivateKeyRec    winPrivateKeyRec;
++    /*
++     * The screen's bits per pixel - the STORAGE, which is not always
++     * the same as the depth. A depth-24 visual in a 32-bit framebuffer
++     * has 24-bit pixel VALUES in 32-bit slots.
++     */
++    int                 bpp;
+ } FbScreenPrivRec, *FbScreenPrivPtr;
+ 
+ #define fbGetScreenPrivate(pScreen) ((FbScreenPrivPtr) \
+--- a/fb/fbscreen.c
++++ b/fb/fbscreen.c
+@@ -99,6 +99,7 @@
+ {                               /* bits per pixel for screen */
+     if (!fbAllocatePrivates(pScreen))
+         return FALSE;
++    fbGetScreenPrivate(pScreen)->bpp = bpp;
+     pScreen->defColormap = FakeClientID(0);
+     /* let CreateDefColormap do whatever it wants for pixels */
+     pScreen->blackPixel = pScreen->whitePixel = (Pixel) 0;
+--- a/mi/miscrinit.c
++++ b/mi/miscrinit.c
+@@ -166,10 +166,33 @@
+         if (!pPixmap)
+             return FALSE;
+ 
++        /*
++         * The root pixmap's bits per pixel is the SCREEN's, not the
++         * depth's.
++         *
++         * BitsPerPixel(depth) is how many bits a pixel VALUE occupies;
++         * the screen's memory is laid out at the screen's bits per
++         * pixel. For a depth-24 visual in a 32-bit framebuffer those
++         * differ, and the pixmap's stride (PixmapBytePad) is computed
++         * for the storage. So the pixmap claimed 24-bit pixels in a
++         * 32-bit row, and anything the fb library drew into it walked
++         * three bytes forward in a four-byte row: the text came out
++         * unreadable, the mouse pointer was invisible, and anything
++         * translucent came out black, because the alpha byte was
++         * never written.
++         *
++         * The stride in bytes, times eight, divided by the width, is
++         * the screen's bits per pixel.
++         */
++        int screen_bpp = pScreen->width ?
++            (PixmapBytePad(pScrInitParms->width, pScreen->rootDepth) * 8) /
++            pScreen->width :
++            BitsPerPixel(pScreen->rootDepth);
++
+         if (!(*pScreen->ModifyPixmapHeader) (pPixmap, pScreen->width,
+                                              pScreen->height,
+                                              pScreen->rootDepth,
+-                                             BitsPerPixel(pScreen->rootDepth),
++                                             screen_bpp,
+                                              PixmapBytePad(pScrInitParms->width,
+                                                            pScreen->rootDepth),
+                                              pScrInitParms->pbits))
