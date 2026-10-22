@@ -301,6 +301,7 @@ scripts/
   inventory.sh                    write down what is in an image, and diff it
   release.sh                      build a release, check it, print the test checklist
   write-stick-image.sh            write it to a stick and verify it byte-for-byte
+  deploy-kernel.sh                send a kernel to a box and prove it arrived
   overrides/                      files the image build substitutes for the vendor's
   fbtools/                        small static tools that measure the framebuffer
   stick/                          the aml_autoscript uImage and its source
