@@ -43,6 +43,26 @@ find_connector() {
     return 1
 }
 
+# Wait for the DRM device to exist before giving up.
+#
+# This script is ordered EARLY (it is what puts a picture on the screen, so it
+# has to run before the boot messages have scrolled away). Started that early
+# it can beat udev, and a mode set attempted before the connector exists is a
+# mode set that never happens - the screen would stay black for the whole
+# boot. So wait for the device rather than depend on ordering luck. When run
+# by hand the device is already there and this returns at once.
+WAIT=${WAIT:-20}
+i=0
+while [ ! -e /dev/dri/card0 ] && [ "$i" -lt "$WAIT" ]; do
+    sleep 1
+    i=$((i + 1))
+done
+if [ ! -e /dev/dri/card0 ]; then
+    log "no /dev/dri/card0 after ${WAIT}s — the display will not come up"
+    exit 1
+fi
+[ "$i" -gt 0 ] && log "waited ${i}s for /dev/dri/card0"
+
 CARD=$(find_connector)
 if [ -z "$CARD" ]; then
     log "no HDMI connector found — is this a box with HDMI?"
@@ -52,10 +72,21 @@ fi
 log "HDMI connector: card$CARD"
 
 if command -v modetest >/dev/null 2>&1; then
+    # Retry: the connector can exist in sysfs before the transmitter is ready
+    # to take a mode.
+    tries=0
     if modetest -s "$CONNECTOR:$MODE" 2>&1 | grep -q "setting mode"; then
         log "mode set to $MODE"
     else
-        log "modetest could not set the mode"
+        while [ "$tries" -lt 3 ]; do
+            tries=$((tries + 1))
+            sleep 1
+            if modetest -s "$CONNECTOR:$MODE" 2>&1 | grep -q "setting mode"; then
+                log "mode set to $MODE (attempt $((tries + 1)))"
+                break
+            fi
+        done
+        [ "$tries" -ge 3 ] && log "modetest could not set the mode"
     fi
 else
     log "modetest not installed — install libdrm-tests, or set the mode by hand:"

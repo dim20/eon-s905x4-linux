@@ -1,13 +1,13 @@
   _____   ____   _   _
- | ____| / __ \ | \ | |
- | |__  | |  | ||  \| |
+ | ____| / __ \\ | \\ | |
+ | |__  | |  | ||  \\| |
  |  __| | |  | || . ` |
- | |___ | |__| || |\  |
- |_____| \____/ |_| \_|
+ | |___ | |__| || |\\  |
+ |_____| \\____/ |_| \\_|
 
  EON Linux - Debian on the EON SDSTB02 (Amlogic S905X4)
 
  \S \r on \m
- Host \n    Address \4
+ Host \n    Address \4    Terminal \l
 
  Default login: root/tvbox - change it with 'passwd'.

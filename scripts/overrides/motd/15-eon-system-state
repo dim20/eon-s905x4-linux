@@ -19,6 +19,10 @@ IP=$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f
 
 echo "  Host:        $(hostname)"
 echo "  Kernel:      $(uname -r)"
+# Which terminal this is. The box has several - the HDMI console (tty1) and
+# the serial console (ttyS0) - and the login prompt is identical on all of
+# them, so say plainly which one you are on.
+echo "  Terminal:    $(tty 2>/dev/null || echo '?')"
 [ -n "$IP" ] && echo "  IP address:  $IP"
 [ -n "$ROOTFS" ] && echo "  Root FS:     $ROOTFS ${ROOTFS_TOTAL:+($ROOTFS_TOTAL)}"
 echo
