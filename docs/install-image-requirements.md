@@ -171,9 +171,9 @@ and compare against a known-good hash. **The unmount/remount is essential** — 
 hash taken while the filesystem is still mounted can be a page-cache artefact
 and will report a corrupt write as clean.
 
-Known-good (this section is the **2026-10-19 record**; the current published
-hashes are in [`../kernel/SHA256SUMS`](../kernel/SHA256SUMS) — Image
-`c1d0d6d4…`, DTB `d1e2267f…`, 78,952 bytes):
+Known-good (this section is the **2026-10-19 record**; the current hashes
+are in [`../kernel/SHA256SUMS`](../kernel/SHA256SUMS) — Image
+`45a67743…`, DTB `d1e2267f…`, 78,952 bytes):
 
 ```
 Image  5adbc4cc53cc3633cf44a07f0d61cc2937af41ed3c717846f253526b46c52dc9  (34551816 B)

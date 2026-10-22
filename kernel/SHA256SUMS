@@ -1,2 +1,9 @@
-c1d0d6d440eb4efa62872404ed8f90cc083ed89425e2a65e2fe0788c8bddc8fa  kernel/Image
+# The kernel this repository ships. Verify a downloaded or built Image with:
+#     sha256sum -c kernel/SHA256SUMS
+#
+# Each release note under docs/releases/ records the hashes of ITS OWN
+# assets, which are frozen. Those are not these: for example the
+# v0.6-desktop Image is 39b91fd0..., and the v0.5.x Image is 93420f6a... .
+# This file tracks the current kernel, which is the one v0.7 will ship.
+45a677435e2af01c5c77dd60692f60ce9482eaa51725fd983717e552d873c0d0  kernel/Image
 d1e2267f5e945acff73f7a8973af9fcbb2d777faf26771e2a7e75687537ffda8  kernel/sc2_s905x4_ah212_linux.dtb

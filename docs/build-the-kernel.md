@@ -159,6 +159,9 @@ make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE O=out \
 ```sh
 make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE O=out \
      CRYPTO_CFLAGS="-I$P/usr/include" CRYPTO_LIBS="-L$P/lib -lcrypto" \
+     KBUILD_BUILD_TIMESTAMP="$STAMP" \
+     KCFLAGS="-ffile-prefix-map=$PWD=/build/linux" \
+     KAFLAGS="-ffile-prefix-map=$PWD=/build/linux" \
      Image dtbs
 ```
 
@@ -172,6 +175,37 @@ out/arch/arm64/boot/dts/amlogic/sc2_s905x4_ah212_linux.dtb   78,952 bytes
 The DTB size is exact and reproducible. The earlier revision of this
 document said 78,956; that was a different build of the same tree, and the
 published DTB is 78,952 bytes.
+
+#### Two flags that make the build reproducible
+
+`KBUILD_BUILD_TIMESTAMP` (or `SOURCE_DATE_EPOCH`, which the project's build
+script turns into it) pins the build date that the kernel prints in
+`uname -v`. Without it, `Image` differs on every build.
+
+`-ffile-prefix-map` is the one that is easy to miss. The kernel embeds
+`__FILE__` in a few places — `arch/arm64/kernel/entry.S` is one — so
+without a map the `Image` carries the absolute path of the build
+directory. That has two consequences, and both are bad for a release:
+
+- **it is not reproducible across machines.** Two people building the same
+  tree in different directories get different images, which is exactly
+  what a reproducible build is supposed to rule out;
+- **it publishes the packager's directory layout.** The first published
+  `Image` contained `/home/dim20/amlogic/build/linux/arch/arm64/kernel/entry.S`.
+
+The map rewrites that prefix — here to `/build/linux` — so the image is
+build-directory independent. It is passed both as `KCFLAGS` and `KAFLAGS`
+because assembly goes through `KAFLAGS` (`Makefile`: `KBUILD_AFLAGS +=
+$(KAFLAGS)`), and `entry.S` is where the string comes from.
+
+After building, check it:
+
+```sh
+grep -a "$PWD" out/arch/arm64/boot/Image && echo "leak - the map did not take"
+```
+
+The project's own build script (`host/build-kernel.sh`) sets both flags
+and fails the build if the path is still in the image.
 
 ### The rest of the patch series
 
@@ -235,15 +269,24 @@ If you build this kernel, use `sc2_s905x4_ah212_linux.dtb`.
 ## Verify your build
 
 ```
-c1d0d6d440eb4efa62872404ed8f90cc083ed89425e2a65e2fe0788c8bddc8fa  Image
+45a677435e2af01c5c77dd60692f60ce9482eaa51725fd983717e552d873c0d0  Image
 d1e2267f5e945acff73f7a8973af9fcbb2d777faf26771e2a7e75687537ffda8  sc2_s905x4_ah212_linux.dtb
 ```
 
-These are the published hashes in [`../kernel/SHA256SUMS`](../kernel/SHA256SUMS).
-Byte-for-byte reproduction of `Image` is not guaranteed — the build embeds a
-timestamp and the host toolchain differs — but the DTB should match exactly,
-and the `Image` should differ only in build metadata. What matters is that it
-is **non-PE** and boots:
+These are the current hashes in [`../kernel/SHA256SUMS`](../kernel/SHA256SUMS),
+which tracks **the kernel this repository ships** — the one v0.7 will use.
+**They are not the hashes of any released image.** Each release note under
+[`releases/`](releases/) records its own, and those are frozen: the
+v0.6-desktop `Image` is `39b91fd0…`, the v0.5.x `Image` is `93420f6a…`.
+The mismatch used to confuse people, and it is worth stating plainly: a
+release note describes a release, `kernel/SHA256SUMS` describes the tree.
+
+With `KBUILD_BUILD_TIMESTAMP` and `-ffile-prefix-map` set (above), and the
+same toolchain and patch set, `Image` should reproduce **byte for byte**,
+wherever the tree is checked out. The DTB is independent of all of it. If
+your `Image` differs, check the two flags before anything else — a plain
+build carries the build path and cannot match. What always matters is that
+it is **non-PE** and boots:
 
 ```sh
 xxd -l 64 Image | head -2     # 'ARMd' at 0x38, NO MZ header
