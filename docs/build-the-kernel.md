@@ -22,7 +22,7 @@ against `kernel/SHA256SUMS`. You do not need to build anything.
 | Commit | `a3aaaa5b0` |
 | Licence | GPL-2.0 |
 | Config | `arch/arm64/configs/meson64_a64_P_defconfig` + `patches/0002-option-D.config.delta` |
-| Local patches | [`../patches/`](../patches/) — nine files: eight source patches (0001, 0003, 0005–0009) and one config delta (0002); see the table below |
+| Local patches | [`../patches/`](../patches/) — eight source patches (0001, 0003, 0005–0008, 0010) and one config delta (0002); see the table below. A ninth, `0009`, was dropped on 2026-10-23 — its justification did not survive testing |
 | Produced | `Image` (34,551,816 bytes) and `sc2_s905x4_ah212_linux.dtb` (78,952 bytes) |
 
 Everything below is what was actually done. Where something was a workaround
@@ -186,12 +186,28 @@ the display, and each one is explained where it matters — in
 | `0006-fbdev-pan-ioctl.patch` | implements the standard `FBIO_PAN_DISPLAY` (0x4619), which this tree's trimmed `fb.h` does not define | proven |
 | `0007-fbdev-buffer-lifetime.patch` | unmaps on close without freeing, retires a replaced buffer, frees when the framebuffer goes away | proven |
 | `0008-fbdev-smem-start.patch` | leaves `fix.smem_start` at zero instead of the physical address, which the X server treats as an offset into its own mapping | proven |
-| `0009-osd-overlay-cma-is-the-display.patch` | stops the vendor driver freeing the overlay's CMA memory a minute after boot | **unproven**: the box survived the release in the last test, so the patch may be unnecessary. It stays in the tree until the `/dev/fb0` test decides it. |
+| `0010-fbdev-console-owns-the-mapping.patch` | a user closing `/dev/fb0` must not clear `screen_base`: the console holds its own reference and keeps drawing through it | proven, 2026-10-23 (P0-1) |
 
-Patch 0009's own comment states a theory (the overlay is the display, and
-freeing its CMA kills the box) that the last measurement did not reproduce.
-It is kept, labelled, so the decision can be made from evidence rather than
-from the comment.
+**There were nine source patches; there are eight.** A patch that stopped
+the vendor's OSD driver freeing 8 MB of CMA a minute after boot (`0009`)
+was removed on 2026-10-23. Its stated reason — that the free pulls the
+memory out from under the display and the box dies every minute — did not
+reproduce: a kernel *without* it ran for two hours past the free with the
+console on the display, and `0005` had already stopped the OSD
+framebuffers being registered, so nothing in the image scans that memory.
+Its real reason for existing was never established, so by this project's
+rule — a patch needs a true, tested justification — it was dropped rather
+than kept on a story.
+
+If the desktop work later shows the free matters (X allocating the region
+the display scans), the patch can come back with that evidence attached.
+Its text is in the git history.
+
+For the record, and because the method matters more than the outcome: the
+series was proved to reproduce the build tree with `scripts/check-patches.sh`
+after every change. That check is what turned up that `0003` had been
+setting `FBINFO_PRIMARY` after `register_framebuffer()`, which is too
+late; it is repaired here.
 
 ---
 
