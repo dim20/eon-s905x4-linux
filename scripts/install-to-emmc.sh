@@ -398,7 +398,7 @@ if [ -n "$ENV_CONF" ] && [ "$ENV_ERASE" = 1 ] && [ -f "$ENV_CONF" ]; then
     # INIT and INIT_PATH are defined at the top level, so they are in scope
     # here and in the manual-instruction fallback path below.
     BOOTCMD=$(cat <<EOF
-usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'; booti 0x2000000 - 0x5000000; fi
+usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 console=tty0 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 console=tty0 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'; booti 0x2000000 - 0x5000000; fi
 EOF
 )
 
@@ -526,7 +526,7 @@ cat <<EOF
  A ready-to-paste conditional bootcmd is in the release README. To
  build it on the box instead:
 
-   fw_setenv bootcmd 'usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs '"'"'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'"'"'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs '"'"'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'"'"'; booti 0x2000000 - 0x5000000; fi'
+   fw_setenv bootcmd 'usb start 0; if fatload usb 0:1 0x2000000 ${USB_PREFIX}$KERNEL_NAME; then fatload usb 0:1 0x5000000 ${USB_PREFIX}$DTB_NAME; setenv bootargs '"'"'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 console=tty0 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'"'"'; booti 0x2000000 - 0x5000000; else mmc dev 1; mmc rescan; ext4load mmc 1:1 0x2000000 $KERNEL_NAME; ext4load mmc 1:1 0x5000000 $DTB_NAME; setenv bootargs '"'"'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 console=tty0 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=$INIT_PATH'"'"'; booti 0x2000000 - 0x5000000; fi'
 
    saveenv
 

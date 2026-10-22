@@ -1,7 +1,16 @@
 # aml_autoscript.src — source for the USB stick's aml_autoscript uImage.
 #
 # Built with:
-#   mkimage -A arm64 -O linux -T script -C none -d aml_autoscript.src aml_autoscript
+#   mkimage -A arm64 -O linux -T script -C none -d aml_autoscript.txt aml_autoscript
+#
+# The payload is aml_autoscript.txt: this file's commands with the comments
+# stripped, because the payload is run by U-Boot's hush parser and a comment
+# with an unbalanced quote in it hangs the parser. Keep the two in step -
+# change a command here, change it there, and rebuild.
+#
+# Note the header's timestamp is the build time, so rebuilding produces a
+# different 64-byte header even when the payload is identical. Compare
+# payloads, not files, when checking a rebuild.
 #
 # WHY THIS EXISTS
 # The vendor's own aml_autoscript (from the factory image) sets a multi-boot
@@ -39,5 +48,5 @@
 usb start 0
 fatload usb 0:1 0x2000000 Image
 fatload usb 0:1 0x5000000 sc2_s905x4_ah212_linux.dtb
-setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/lib/systemd/systemd'
+setenv bootargs 'root=/dev/sda2 rootfstype=ext4 rootwait rw console=ttyS0,921600 console=tty0 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 init=/lib/systemd/systemd'
 booti 0x2000000 - 0x5000000

@@ -244,7 +244,7 @@ There are three ways back in, in increasing order of effort:
    `rescue-init.sh`:
 
    ```
-   setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 init=/root/rescue-init.sh'
+   setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 console=tty0 init=/root/rescue-init.sh'
    ext4load mmc 1:1 0x2000000 Image
    ext4load mmc 1:1 0x5000000 sc2_s905x4_ah212_linux.dtb
    booti 0x2000000 - 0x5000000
