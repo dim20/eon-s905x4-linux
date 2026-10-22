@@ -1,0 +1,19 @@
+# /etc/eon-release — the identity of this port.
+#
+# Debian's own /etc/os-release is deliberately NOT modified. On Debian 13
+# it is a symlink to /usr/lib/os-release, owned by base-files: writing our
+# name into it would be undone by the next upgrade and would make
+# `dpkg --verify` complain. More importantly, it would be less true - the
+# base IS Debian, apt and every Debian tool correctly read ID=debian, and
+# the port is an addition, not a different distribution.
+#
+# So the port identifies itself here, in /etc/issue, /etc/issue.net and
+# the login message. The product name is EON Linux; the repository is
+# eon-s905x4-linux. Keep this file shell-compatible: the MOTD header
+# sources it.
+
+NAME="EON Linux"
+PORT="eon-s905x4-linux"
+BOARD="EON SDSTB02 (Amlogic S905X4 / SC2)"
+BASE="Debian 13 (trixie)"
+PRETTY_NAME="EON Linux - Debian on the EON SDSTB02"

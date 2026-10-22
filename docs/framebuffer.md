@@ -1,5 +1,9 @@
 # The framebuffer, and what the display is really doing
 
+Last verified: **2026-10-23** against the record of the 2026-10-21
+measurements and the box's logs; the measurements themselves were not
+re-run during the documentation pass.
+
 This is the honest record of how the display works on this box, and of
 a diagnosis that was wrong for a long time and had to be corrected.
 
@@ -43,6 +47,19 @@ mapping did not become visible to the `mmap` straight away, while a
 small write sat in the WC buffer. Small updates can therefore be
 delayed, which is worth knowing when a single small change does not
 appear at once.
+
+### `fb4` then, `fb0` now
+
+The measurement above was taken while the OSD overlay framebuffers still
+existed. They registered first, so the usable console framebuffer was
+`/dev/fb4` and the debugfs plane it named was the vendor's composited OSD
+path. Patch `0005` stops those framebuffers being registered at all, so
+the console now binds to the primary-plane framebuffer, `/dev/fb0`.
+
+The device number changed; the display path did not. That is why
+`docs/releases/v0.4-console.md` says `fb4` — it was true when it was
+written — and everything current says `fb0`. The release note is
+immutable; this paragraph is the explanation.
 
 ## The diagnosis that was wrong
 
@@ -154,21 +171,34 @@ framebuffer goes away.
 
 ### What is still wrong
 
-The desktop, its windows and their backgrounds now reach the television.
-**The text does not**: the glyphs are copied into the framebuffer with
-the wrong stride, and repeat every 652 pixels where they should be
-written once. The window's background and border are correct; only the
-glyphs are wrong, which means they are drawn by a different mechanism
-— the X server's font engine, rather than the client — and reach the
-framebuffer by a different path.
+**The desktop's text — and only on the desktop.** Diagnosed on
+2026-10-21, after v0.6 shipped: the X server's screen pixmap was **24 bits
+deep inside a 32-bit framebuffer with a 7680-byte stride**. The X server's
+own rasteriser — its font engine and the mouse pointer — writes three
+bytes per pixel into storage that takes four, so the glyphs are smeared
+across the row and repeat every 652 pixels. Everything a *client* draws is
+drawn by the client at the right depth, which is why backgrounds and window
+borders were correct and only the glyphs (and the pointer) were wrong.
 
-Two more symptoms in the same area:
+The fix is upstream X's `fb24_32` conversion, which the modesetting driver
+uses and this version of the fbdev driver does not.
+[`../patches/xserver-xorg-video-fbdev/`](../patches/xserver-xorg-video-fbdev/)
+and [`../scripts/build-fbdev-driver.sh`](../scripts/build-fbdev-driver.sh)
+are the attempt at it. **The desktop is frozen until after v0.7-tty**, so
+neither is part of the released image.
 
-* the mouse pointer vanishes over the terminal windows;
-* the terminal started from the XFCE menu comes up blank, with no
-  shell, while the same `xterm` started from a shell works. That one
-  smells like a missing font rather than a missing stride: a terminal
-  with no font can draw its background and its border and nothing else.
+> **SUPERSEDED 2026-10-21.** An earlier revision of this section said the
+> glyphs were "drawn by a different mechanism" and "reach the framebuffer
+> by a different path", and guessed that the blank terminal from the XFCE
+> menu was a missing font. There was no second path: the X server's own
+> output goes to the same buffer, at the wrong depth. The blank terminal
+> was a separate symptom; it was not pursued once the desktop was frozen,
+> and it is not evidence about the text bug. The evidence that settled
+> that is in [`releases/errata-v0.6.md`](releases/errata-v0.6.md).
+
+**The text console is unaffected.** The kernel's console writes at the
+framebuffer's own depth, which is why the console has been readable
+throughout. This is a desktop bug, not a framebuffer bug.
 
 ### The shadows, and why there is no alpha
 
@@ -197,6 +227,11 @@ with `Option "DefaultDepth" "32"`, the X server refuses to start:
 because `xf86SetWeight()` checks the weights against the depth, and the
 driver has just set them to zero. **The alpha channel is not reachable
 by configuration**; it needs a different X driver, or a patched one.
+
+A patched driver exists in
+[`../patches/xserver-xorg-video-fbdev/`](../patches/xserver-xorg-video-fbdev/):
+it asks for a 32-bit visual and sets the weights itself. It is frozen
+together with the desktop; it is not in any released image.
 
 The tools in `scripts/fbtools/` answer all three: `fbhash` says
 whether the framebuffer changed, `fbhalves` and `fbregion` show what

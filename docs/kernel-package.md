@@ -1,10 +1,14 @@
 # The kernel package
 
+Last verified: **2026-10-23** against `kernel/VERSION`,
+`manifest/kernel-package.txt` and `scripts/build-kernel-package.sh`.
+No package was built during the documentation pass.
+
 The kernel for this box, as a Debian package, so that `apt` can
 install it and switch between versions.
 
 ```
-apt install ./linux-image-eon_5.4.210-eon1_arm64.deb
+apt install ./linux-image-eon_5.4.210-eon3_arm64.deb
 ```
 
 ---
@@ -40,6 +44,24 @@ The package does all three.
 
 **There are no modules.** The kernel is built with everything built in,
 so the package has no `/lib/modules` tree, and it is small.
+
+## The version label, and `uname -r`
+
+Two strings appear in this project and they are **not the same thing**:
+
+| | value | what it is |
+|---|---|---|
+| `kernel/VERSION` | `5.4.210-eon3` | the release label for the package — the version apt sees |
+| `uname -r` | `5.4.210-ga3aaaa5b0e64-dirty` | what the kernel reports — the vendor tree's `git describe` output |
+
+The package is versioned with the label, so the file is
+`linux-image-eon_5.4.210-eon3_arm64.deb`. The running kernel keeps the
+vendor string, because changing it would mean rebuilding the `Image` to
+change a string — and the published `Image` has been reproduced and
+tested. The label is the **package's** identity, not the kernel's.
+
+`eon-kernel-list` shows both, so there is no need to guess which is which.
+Do not hand-edit the `Image` to make the strings match.
 
 ## What it does not do
 
@@ -102,12 +124,22 @@ To be clear about what "installing" means here: the kernel on the boot
 partition is replaced, and the one that was there is archived. The box
 boots the new kernel on the next power cycle.
 
+### Getting the package onto the box
+
+The package is about 35 MB. On 2026-10-22 a transfer over the box's
+100 Mbps link stalled at about 6.4 MB, so do not assume a single `scp`
+succeeded: check the hash at the other end.
+
+If the transfer is unreliable, copy the `.deb` onto the USB stick and
+install it from there. It is a single self-contained file; nothing needs
+to be fetched at install time.
+
 ## Building it
 
 ```sh
 scripts/build-kernel-package.sh --kernel kernel/Image \
                                 --dtb kernel/sc2_s905x4_ah212_linux.dtb \
-                                --version 5.4.210-eon1
+                                --version 5.4.210-eon3
 ```
 
 `SOURCE_DATE_EPOCH` must be set, or the package is not reproducible —

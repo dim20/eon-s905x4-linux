@@ -1,5 +1,5 @@
 #!/bin/sh
-# 01-quban-header — the banner at the top of the login message.
+# 01-eon-header — the banner at the top of the login message.
 #
 # WHY THIS IS NOT THE VENDOR'S VERSION
 #
@@ -15,10 +15,12 @@
 # showed up on the television.
 #
 # Everything below is plain ASCII, so it renders identically on the TV,
-# on the serial console and over SSH.
+# on the serial console and over SSH. The identity comes from
+# /etc/eon-release; Debian's own /etc/os-release is left alone and still
+# truthfully says Debian.
 
-[ -r /etc/os-release ] && . /etc/os-release
+[ -r /etc/eon-release ] && . /etc/eon-release
 
-echo "  ${NAME:-Linux} ${VERSION_ID:-} ${VERSION_CODENAME:+($(echo "$VERSION_CODENAME" | tr '[:lower:]' '[:upper:]'))}"
-echo "  eon-s905x4-linux - Linux for the EON SDSTB02 (Amlogic S905X4 / SC2)"
+echo "  ${NAME:-EON Linux} - ${BASE:-Debian}"
+echo "  eon-s905x4-linux - Debian for the EON SDSTB02 (Amlogic S905X4 / SC2)"
 echo

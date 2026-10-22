@@ -252,7 +252,9 @@ fi
 # The image ships NO desktop. A desktop is 450 MB of packages and a display
 # manager that grabs the framebuffer console, and the whole point of this
 # image is a small, minimal system with a TEXT console on the HDMI output.
-# The user picks a desktop afterwards with tasksel.
+# The desktop is frozen until after the TTY release, and will return as an
+# optional package set. tasksel stays in the tree for that later work; it
+# does not currently produce a usable desktop (docs/releases/errata-v0.6.md).
 #
 # This is checked rather than assumed: a build machine that happens to have a
 # desktop installed would otherwise quietly ship one, and the display manager
@@ -270,12 +272,13 @@ if [ -f "$STATUS" ]; then
   the text console on the HDMI output needs the framebuffer, and a display
   manager takes it. Remove it from the tree first, for example:
       chroot $ROOTFS_TREE apt-get purge --auto-remove $p
-  and leave tasksel in place so the user can choose a desktop later."
+  and leave tasksel in place: it is part of the base and the later
+  optional-desktop work depends on it. It does not fix the desktop today."
         fi
     done
     if ! grep -q "^Package: tasksel$" "$STATUS"; then
         die "the source tree has no tasksel.
-  Without it the user cannot choose a desktop after installing."
+  It is part of the base, and the later optional-desktop work needs it."
     fi
     log "  no desktop packages in the source tree; tasksel is present"
 else
@@ -341,6 +344,20 @@ if [ -d "$HERE/overrides" ]; then
             mkdir -p "$dest"
             cp -a "$src" "$dest/xorg.conf"
             log "  applied override: $name"
+        elif [ "$name" = "etc" ]; then
+            # Files that belong directly in /etc: /etc/issue,
+            # /etc/issue.net and /etc/eon-release. They replace whatever
+            # the vendor put there - in the vendor image /etc/issue and
+            # /etc/issue.net are symlinks into /usr/lib/qubian - so the
+            # destination is removed first rather than written through.
+            mkdir -p "$ROOTFS_TREE/etc"
+            for f in "$src"/*; do
+                [ -e "$f" ] || continue
+                dest="$ROOTFS_TREE/etc/$(basename "$f")"
+                rm -f "$dest"
+                cp -a "$f" "$dest"
+                log "  installed /etc/$(basename "$f")"
+            done
         elif [ -d "$src" ]; then
             # a drop-in directory: e.g. chrony-wait.service.d/
             dest="$ROOTFS_TREE/etc/systemd/system/$name"

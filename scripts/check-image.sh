@@ -160,6 +160,30 @@ check_forbidden_paths() {
     done < <(entries "$MANIFEST/forbidden-paths.txt")
 }
 
+# ---------------------------------------------------------------- strings
+# A path may be required to exist and still be wrong: /etc/issue can be
+# present and still carry the vendor's name. This check is how the
+# branding claim is enforced rather than asserted.
+check_forbidden_strings() {
+    local path text file
+    while read -r path text <&3; do
+        [ -n "$path" ] || continue
+        if [ -z "$text" ]; then
+            fail "malformed rule in manifest/forbidden-strings.txt: '$path' has no string"
+            continue
+        fi
+        file="$ROOTFS/${path#/}"
+        # Existence belongs to required-paths.txt. If the file is absent
+        # there is nothing to search, and complaining twice helps nobody.
+        [ -f "$file" ] || continue
+        if grep -Fq -- "$text" "$file"; then
+            fail "the file '$path' contains the forbidden string '$text'"
+        else
+            ok
+        fi
+    done 3< <({ grep -v '^[[:space:]]*#' "$MANIFEST/forbidden-strings.txt" 2>/dev/null || true; } | grep -v '^[[:space:]]*$')
+}
+
 # ---------------------------------------------------------------- units
 # Is a unit enabled? A unit is enabled when there is a symlink to it
 # somewhere under /etc/systemd/system/*.wants/ - which is what
@@ -419,6 +443,7 @@ fi
 [ -f "$MANIFEST/forbidden-packages.txt" ] && check_packages "$MANIFEST/forbidden-packages.txt" forbidden
 check_required_paths
 check_forbidden_paths
+[ -f "$MANIFEST/forbidden-strings.txt" ] && check_forbidden_strings
 [ -f "$MANIFEST/required-units.txt" ] && check_units
 [ -f "$MANIFEST/forbidden-units.txt" ] && check_forbidden_units
 [ -f "$MANIFEST/masked-units.txt" ] && check_masked_units

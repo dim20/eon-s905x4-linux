@@ -46,6 +46,14 @@ including the installer, which is why the installer backs it up and restores
 it. If you `dd` over p2 by hand, expect `bootcmd` to revert to the vendor
 default and the box to boot the wrong thing.
 
+### There is no network in U-Boot
+
+U-Boot's Ethernet is broken on this board: it uses the vendor's MAC address
+(`ff3f0000`) while the board's is `fdc00000`, so `dhcp` and `tftp` fail.
+There is **no netboot recovery path**, which is why the ladder below has no
+such step. Use the stick or the serial console; do not spend a session on
+`dhcp`.
+
 ---
 
 ## 1. UART console (preferred — read-only, always safe)

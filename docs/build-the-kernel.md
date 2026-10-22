@@ -1,5 +1,9 @@
 # Building the kernel
 
+Last verified: **2026-10-23** against `kernel/VERSION`,
+`kernel/SHA256SUMS` and `patches/`. No build was run during the
+documentation pass, so the build log below is the 2026-10-21 one.
+
 Required for two reasons: to rebuild the `Image` this project ships, and to
 satisfy GPL-2.0 §3, which requires that anyone given the binary is also given
 the Corresponding Source.
@@ -17,9 +21,9 @@ against `kernel/SHA256SUMS`. You do not need to build anything.
 | Branch | `amlogic-5.4.210` |
 | Commit | `a3aaaa5b0` |
 | Licence | GPL-2.0 |
-| Config | `arch/arm64/configs/meson64_a64_P_defconfig` |
-| Local patches | [`../patches/`](../patches/) — two files, both explained below |
-| Produced | `Image` (34,551,816 bytes) and `sc2_s905x4_ah212_linux.dtb` (78,956 bytes) |
+| Config | `arch/arm64/configs/meson64_a64_P_defconfig` + `patches/0002-option-D.config.delta` |
+| Local patches | [`../patches/`](../patches/) — nine files: eight source patches (0001, 0003, 0005–0009) and one config delta (0002); see the table below |
+| Produced | `Image` (34,551,816 bytes) and `sc2_s905x4_ah212_linux.dtb` (78,952 bytes) |
 
 Everything below is what was actually done. Where something was a workaround
 rather than a clean fix, it says so.
@@ -156,8 +160,32 @@ Outputs:
 
 ```
 out/arch/arm64/boot/Image                              34,551,816 bytes
-out/arch/arm64/boot/dts/amlogic/sc2_s905x4_ah212_linux.dtb   78,956 bytes
+out/arch/arm64/boot/dts/amlogic/sc2_s905x4_ah212_linux.dtb   78,952 bytes
 ```
+
+The DTB size is exact and reproducible. The earlier revision of this
+document said 78,956; that was a different build of the same tree, and the
+published DTB is 78,952 bytes.
+
+### The rest of the patch series
+
+`0001` and `0002` above are about making the tree build. The rest are about
+the display, and each one is explained where it matters — in
+[`framebuffer.md`](framebuffer.md) and in the patch itself:
+
+| Patch | What it does | Status |
+|---|---|---|
+| `0003-console-bind-to-display.patch` | binds the framebuffer console to the display and gives it a size, so text reaches the television | proven on hardware |
+| `0005-no-osd-framebuffers.patch` | stops the DRM and media drivers exposing the OSD overlay planes as framebuffers — they are not CPU-accessible, and they register first | proven |
+| `0006-fbdev-pan-ioctl.patch` | implements the standard `FBIO_PAN_DISPLAY` (0x4619), which this tree's trimmed `fb.h` does not define | proven |
+| `0007-fbdev-buffer-lifetime.patch` | unmaps on close without freeing, retires a replaced buffer, frees when the framebuffer goes away | proven |
+| `0008-fbdev-smem-start.patch` | leaves `fix.smem_start` at zero instead of the physical address, which the X server treats as an offset into its own mapping | proven |
+| `0009-osd-overlay-cma-is-the-display.patch` | stops the vendor driver freeing the overlay's CMA memory a minute after boot | **unproven**: the box survived the release in the last test, so the patch may be unnecessary. It stays in the tree until the `/dev/fb0` test decides it. |
+
+Patch 0009's own comment states a theory (the overlay is the display, and
+freeing its CMA kills the box) that the last measurement did not reproduce.
+It is kept, labelled, so the decision can be made from evidence rather than
+from the comment.
 
 ---
 
@@ -185,14 +213,15 @@ If you build this kernel, use `sc2_s905x4_ah212_linux.dtb`.
 ## Verify your build
 
 ```
-5adbc4cc53cc3633cf44a07f0d61cc2937af41ed3c717846f253526b46c52dc9  Image
-176ddf27b9e392175dbbbd057449d023c7ddd8bda68210d54c71fccf585d2043  sc2_s905x4_ah212_linux.dtb
+c1d0d6d440eb4efa62872404ed8f90cc083ed89425e2a65e2fe0788c8bddc8fa  Image
+d1e2267f5e945acff73f7a8973af9fcbb2d777faf26771e2a7e75687537ffda8  sc2_s905x4_ah212_linux.dtb
 ```
 
-Byte-for-byte reproduction is not guaranteed — the build embeds a timestamp and
-the host toolchain differs — but the DTB should match exactly, and the `Image`
-should differ only in build metadata. What matters is that it is **non-PE** and
-boots:
+These are the published hashes in [`../kernel/SHA256SUMS`](../kernel/SHA256SUMS).
+Byte-for-byte reproduction of `Image` is not guaranteed — the build embeds a
+timestamp and the host toolchain differs — but the DTB should match exactly,
+and the `Image` should differ only in build metadata. What matters is that it
+is **non-PE** and boots:
 
 ```sh
 xxd -l 64 Image | head -2     # 'ARMd' at 0x38, NO MZ header

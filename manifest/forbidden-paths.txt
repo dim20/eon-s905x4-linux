@@ -61,9 +61,23 @@
 /run/*
 !/run/sshd
 
-# --- the vendor's kernel modules -----------------------------------------
-# The image boots OUR kernel (kernel/Image, 5.4.210-ga3aaaa5b0e64-dirty).
-# These modules are for a different kernel (6.18.55-meson64), so they
-# cannot be loaded - they are 83 MB of dead weight in an 800 MB partition
-# that they can never be used from.
-/lib/modules/*
+# --- the vendor's kernel modules: NOT forbidden, and why ------------------
+# This file used to forbid "/lib/modules/*". That rule never matched
+# anything: on Debian 13 /lib is a symlink to usr/lib (see
+# manifest/inventory.txt), and `find` does not follow symlinks. The
+# modules are really at:
+#
+#     /usr/lib/modules/6.18.55-meson64
+#
+# They are still in the image - 1327 files, 80.4 MB - and the image boots
+# a different kernel (kernel/Image), so they can never be loaded. The
+# manifest cannot claim they are absent, because they are not. They are
+# recorded, with their cost and the planned fix, in
+# manifest/vendor-leftovers.txt.
+#
+# When they are actually removed (P1-16), the rule to add here is:
+#
+#     /usr/lib/modules/*
+#
+# A rule for /lib/modules/* would still match nothing, for the reason
+# above, and would look like protection without being any.

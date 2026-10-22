@@ -13,8 +13,11 @@
 #   2. A desktop is roughly 450 MB of packages in an image whose whole
 #      point is to be small and to boot to a prompt in a few seconds.
 #
-# The user picks a desktop AFTER the install, with tasksel. That is why
-# tasksel and tasksel-data are in required-packages.txt.
+# The desktop is not part of this image, and is frozen until after
+# v0.7-tty. It will return as an optional package set; it will not become
+# a second image. tasksel and tasksel-data stay in the base for that later
+# work, but running tasksel today installs a desktop whose text is
+# unreadable - see docs/releases/errata-v0.6.md.
 
 # --- display managers ----------------------------------------------------
 lightdm
@@ -53,9 +56,18 @@ task-mate-desktop-environment
 task-cinnamon-desktop-environment
 
 # --- the X server itself -------------------------------------------------
-# The X server needs a working vblank interrupt, which the vendor CRTC
-# does not deliver (see the vblank bug). It is also 20 MB of packages
-# for something the image does not use.
+# The image is a text console. A display manager or an X server started
+# at boot takes the framebuffer away from that console, and the desktop
+# path is not ready:
+#
+#   * v0.6-desktop's terminal text was unreadable - the X server's screen
+#     pixmap was 24 bits deep in a 32-bit framebuffer (see
+#     docs/releases/errata-v0.6.md), and the fix needs fb24_32;
+#   * the vendor CRTC never delivers a vblank event - real, but not the
+#     reason the image is text-only.
+#
+# The desktop returns as an optional package set, installed after the
+# base is released. It is not part of this image.
 xserver-xorg
 xserver-xorg-core
 xserver-xorg-input-all

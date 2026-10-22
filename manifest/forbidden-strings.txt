@@ -1,0 +1,46 @@
+# Text that must NOT appear in the image's login files.
+#
+# Format, one rule per line:
+#
+#     <path> <text>
+#
+#   path   relative to the root of the image (a leading / is allowed)
+#   text   the literal string; it is the rest of the line, so it may
+#          contain spaces, but not leading or trailing whitespace
+#
+# Lines starting with '#' and blank lines are ignored.
+#
+# A file that is missing is not a failure here: required-paths.txt says
+# whether it must exist. This file says only what it must not contain.
+#
+# Why these strings:
+#
+#   QUBIAN / qubian   the vendor's distribution name. It was in the
+#                     vendor's /etc/issue and /etc/issue.net as ASCII art,
+#                     and in the paths of their MOTD hooks.
+#   DEVMFC / devmfc   the upstream rootfs project this image is derived
+#                     from. It is credited in docs/licensing.md, which is
+#                     the right place for it; it is not our product name
+#                     and must not greet the user as if it were.
+#
+# The identity we do ship is in /etc/eon-release, /etc/issue, /etc/issue.net
+# and /etc/update-motd.d/01-eon-header. See plan/HOUSEKEEPING.md §4.
+
+/etc/issue QUBIAN
+/etc/issue qubian
+/etc/issue DEVMFC
+/etc/issue devmfc
+/etc/issue DEV MFC
+/etc/issue.net QUBIAN
+/etc/issue.net qubian
+/etc/issue.net DEVMFC
+/etc/issue.net devmfc
+/etc/issue.net DEV MFC
+/etc/update-motd.d/01-eon-header QUBIAN
+/etc/update-motd.d/01-eon-header qubian
+/etc/update-motd.d/01-eon-header DEVMFC
+/etc/update-motd.d/01-eon-header devmfc
+/etc/update-motd.d/15-eon-system-state QUBIAN
+/etc/update-motd.d/15-eon-system-state qubian
+/etc/update-motd.d/15-eon-system-state DEVMFC
+/etc/update-motd.d/15-eon-system-state devmfc

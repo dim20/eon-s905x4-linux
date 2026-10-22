@@ -171,11 +171,19 @@ and compare against a known-good hash. **The unmount/remount is essential** — 
 hash taken while the filesystem is still mounted can be a page-cache artefact
 and will report a corrupt write as clean.
 
-Known-good:
+Known-good (this section is the **2026-10-19 record**; the current published
+hashes are in [`../kernel/SHA256SUMS`](../kernel/SHA256SUMS) — Image
+`c1d0d6d4…`, DTB `d1e2267f…`, 78,952 bytes):
+
 ```
 Image  5adbc4cc53cc3633cf44a07f0d61cc2937af41ed3c717846f253526b46c52dc9  (34551816 B)
 DTB    176ddf27b9e392175dbbbd057449d023c7ddd8bda68210d54c71fccf585d2043  (78956 B)
 ```
+
+> **SUPERSEDED 2026-10-23** — these are not the hashes to verify a current
+> image against. The kernel and DTB were rebuilt for v0.6-desktop; the
+> hashes above remain here as the record of what the installer test used.
+> Use `kernel/SHA256SUMS`.
 
 ## 8. Installer bugs — status
 

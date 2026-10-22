@@ -8,26 +8,37 @@
 # When one of these is dealt with, it moves to manifest/forbidden-*.txt
 # and its entry here is deleted.
 
-## The vendor's kernel package — 83 MB of modules for a kernel we do not boot
+## The vendor's kernel package — 80.4 MB of modules for a kernel we do not boot
 
     linux-image-6.18.55-meson64
 
-**What it is.** The vendor's own kernel, and the 1327 loadable modules
-that go with it, in /lib/modules/6.18.55-meson64.
+**What it is.** The vendor's own kernel, and the 1327 loadable modules that
+go with it. The exact path is:
 
-**Why it is still here.** The image boots OUR kernel — 5.4.210-ga3aaaa5b0e64-dirty,
-built from the vendor tree with patches/0002 and patches/0003 applied. Those
-modules are for a different kernel, so they can never be loaded. Removing
-them means editing dpkg's database by hand, and a botched dpkg database
-breaks apt, which breaks "install a desktop with tasksel" — the thing we
-most want to work.
+    /usr/lib/modules/6.18.55-meson64
 
-**What it costs.** 83 MB in an 800 MB partition, and a misleading
-/lib/modules directory.
+not /lib/modules: on Debian 13, /lib is a symlink to usr/lib, so the two
+spell the same file. The manifest counts 1327 files totalling 84,257,106
+bytes (80.4 MB) under that directory. (An earlier revision of this file
+said 83 MB and /lib/modules; both were imprecise, not a different tree.)
+
+**Why it is still here.** The image boots OUR kernel —
+5.4.210-ga3aaaa5b0e64-dirty, built from the vendor tree with the patches in
+`patches/` applied. Those modules are for a different kernel (6.18.55), so
+they can never be loaded. Removing them means editing dpkg's database by
+hand, and a botched dpkg database breaks apt — which breaks every later
+step, not just one.
+
+**What it costs.** 80.4 MB in an 800 MB partition, and a misleading
+/usr/lib/modules directory that suggests loadable modules exist when the
+running kernel has none.
 
 **How it should be dealt with.** Not by hand. The right fix is to build the
 rootfs from a package list (mmdebstrap), where the vendor's kernel package
-is never installed in the first place. Parked — see BUILD-MANIFEST.md.
+is never installed in the first place. That is P1-16 in
+plan/PLAN-OF-RECORD.md. When it is done, the rule goes into
+manifest/forbidden-paths.txt as `/usr/lib/modules/*` — with the leading
+/usr, because a rule without it matches nothing.
 
 ## The vendor's branding — `qubian-distro`, `toilet`, `toilet-fonts`
 
@@ -41,7 +52,7 @@ banner hooks and /etc/boot-run-once.
 - the login banner hooks were replaced with ours (the vendor's printed
   terminal escape sequences, which the framebuffer console renders as
   literal "\e[0;91m" text on the television);
-- /root/.bashrc is empty;
+- /etc/issue, /etc/issue.net and /root/.bashrc are replaced or empty;
 - /etc/fstab is written by the installer;
 - the stick-growing script they own is removed — see
   manifest/forbidden-paths.txt.

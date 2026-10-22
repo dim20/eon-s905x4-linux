@@ -1,11 +1,12 @@
-# eon-s905x4-linux
+# eon-s905x4-linux — EON Linux
 
-Linux on the **EON SDSTB02** (Greek EON / NOVA set-top box, built by SDMC) —
-an Amlogic **S905X4 / SC2** box with 2 GB LPDDR4 and 14.6 GB eMMC.
+Debian on the **EON SDSTB02** (Greek EON / NOVA set-top box, built by
+SDMC) — an Amlogic **S905X4 / SC2** box with 2 GB LPDDR4 and 14.6 GB
+eMMC — turned into a small, silent, general-purpose Linux computer.
 
-The box ships with a locked Android bootloader and no way to boot anything else.
-This project gets it to boot Debian Linux from eMMC, unattended, with nothing
-plugged in.
+The box ships with a locked Android bootloader and no way to boot
+anything else. This project gets it to boot Debian from eMMC,
+unattended, with nothing plugged in.
 
 ```
 UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
@@ -15,36 +16,54 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 
 ## Status
 
-**v0.4-console** — a stick image you can `dd` and boot, and a box that gives
-you a **text console on the TV**. Works on the development box. Not yet
-validated on other hardware.
+| | |
+|---|---|
+| **Latest TTY release** | **v0.5.1** — the text console on HDMI works; 0 failed units |
+| **Latest desktop release** | **v0.6-desktop** — not recommended: its terminal text is unreadable. See [`docs/releases/errata-v0.6.md`](docs/releases/errata-v0.6.md) |
+| **Next** | **v0.7-tty** — folds in the work below that is not in a published image yet |
+
+The desktop is **frozen** until v0.7-tty is published. It comes back as an
+optional package set, not as a second image.
+
+Verified on the development box for v0.5.1:
 
 | | |
 |---|---|
-| Boots unattended from eMMC | ✅ power cycle only, ~7 s to a systemd login |
+| Boots unattended from eMMC | ✅ power cycle only, a few seconds to a systemd login |
 | Boots unattended from the stick | ✅ 1 boot / 1 booti / 0 prompts |
-| systemd | ✅ running as PID 1 — 0 failed units, `apt` works |
+| systemd | ✅ PID 1, **0 failed units**, `apt` works |
 | 4 cores | ✅ |
 | Ethernet 100 Mbps | ✅ internal RMII PHY |
-| HDMI | ✅ **1920×1080 output confirmed on a real display** |
-| Text console on HDMI | ✅ **a login prompt on the TV, confirmed on a real display** |
-| Audio | ASoC card + SPDIF register — **never confirmed audible** |
-| USB 2.0 / 3.0 | ✅ |
-| Bluetooth | present |
-| DVB tuner | ❌ not populated on this variant |
-| WiFi | ❌ RTL8812CS, no open driver (you supply a closed one) |
-| Network after boot | ✅ DHCP, DNS, SSH — verified from a cold power cycle |
+| HDMI | ✅ 1920×1080 output confirmed on a real display |
+| Text console on HDMI | ✅ a login prompt on the TV, confirmed on a real display |
+| Network after boot | ✅ DHCP, DNS, SSH, from a cold power cycle |
 | Clock after boot | ✅ chrony, with a persisted last-known-good fallback |
 | Automated eMMC install | ✅ runs end-to-end, verifies every write from storage |
-| Bootcmd installed automatically | ✅ the installer discovers the U-Boot env and sets it |
-| U-Boot recovery window | ✅ `bootdelay=3` — a "hit any key" prompt on every boot |
-| Root filesystem size | ✅ 15 GB on the eMMC, not the 744 MB it started as |
-| Kernel as a package | ✅ `apt install` it; the old kernel is archived, so a bad one can be put back |
+| Bootcmd installed automatically | ✅ the installer finds the U-Boot environment and sets it |
+| U-Boot recovery window | ✅ `bootdelay=3` — a "hit any key" prompt, when no stick is attached |
+| Root filesystem size | ✅ 15 GB on the eMMC, not the 744 MB it started with |
+| Audio | ❌ never confirmed audible |
+| USB keyboard on the HDMI console | ⏳ being verified for v0.7 |
+| WiFi | ❌ no open driver for the RTL8812CS |
 
-### Quick start
+In the repository, but **not yet in a published image** (they land in
+v0.7-tty):
 
-Download `eon-s905x4-linux-stick.img.gz` from the Releases page and write it
-to a USB stick of 1 GB or more:
+- the framebuffer fixes (`fix.smem_start`, the buffer's lifetime);
+- the kernel as an installable package, labelled `5.4.210-eon3`, with
+  rollback ([`docs/kernel-package.md`](docs/kernel-package.md)); its
+  `uname -r` is the vendor tree's own string, and the document explains
+  why the two differ;
+- `scripts/check-patches.sh`, which proves the published patches
+  reproduce the build tree;
+- the corrected build script that can no longer silently drop
+  `CONFIG_DRM_MESON_EMULATE_FBDEV`;
+- brand-new login branding (see below).
+
+## Quick start
+
+Download the TTY image (`eon-s905x4-linux-stick.img.gz` from **v0.5.1**,
+until v0.7-tty is published) and write it to a USB stick of 1 GB or more:
 
 ```sh
 gunzip -c eon-s905x4-linux-stick.img.gz | sudo dd of=/dev/sdX bs=4M status=progress
@@ -55,14 +74,14 @@ Plug it into the box and power cycle. The box boots the stick, brings up
 networking and SSH, and gives you a login (`root` / `tvbox`):
 
 ```sh
-ssh root@<the address the box says on the serial console>
+ssh root@<the address the box prints on the console>
 ```
 
-**There is also a login prompt on the TV.** Plug a display into the HDMI
-output and the box gives you a text terminal on it — you do not need SSH,
-a serial cable, or any other way in. The terminal is a normal Linux
-console: `root` and `tvbox` to log in, `passwd` to change the password,
-and `Ctrl-Alt-F1`/`Ctrl-Alt-F2` to move between terminals.
+**There is also a login prompt on the HDMI output.** Plug in a display
+and a USB keyboard and the box gives you a text terminal — no SSH, no
+serial cable needed. The *output* is confirmed on a real display; USB
+keyboard *input* on that console is the one part still being verified for
+v0.7. If the keyboard does not respond, use SSH.
 
 From there, provision the eMMC:
 
@@ -70,66 +89,71 @@ From there, provision the eMMC:
 /root/install-to-emmc.sh
 ```
 
-It verifies every artefact before and after writing, grows the filesystem to
-fill the eMMC, and sets the boot command so the box boots on its own
+It verifies every artefact before and after writing, grows the filesystem
+to fill the eMMC, and sets the boot command so the box boots on its own
 afterwards. **Remove the stick and power cycle** to confirm.
 
-If your stick is larger than 1 GB and you want the extra space in the live
-system, run `scripts/grow-stick.sh` against it first.
+If your stick is larger than 1 GB and you want the extra space in the
+live system, run `scripts/grow-stick.sh` against it first.
 
-### Known gaps in v0.3
+### The login banner
+
+The release you download today (v0.5.1) still shows the vendor's login
+art. The repository replaces it with our own banner, and the change lands
+in v0.7-tty. It is plain ASCII on purpose: the framebuffer console does
+not interpret terminal escape sequences.
+
+## Known gaps
 
 These are real and will bite you:
 
-1. **Audio has never been confirmed audible.** The ASoC card registers and
-   the HDMI transmitter reports a valid audio format, but nobody has heard
-   a speaker.
-2. **There is no desktop on the image.** The image is deliberately headless
-   so it stays small enough to fit a 1 GB stick and boots in about 7
-   seconds. There **is** a text console on the HDMI output — see the quick
-   start above — but no graphical desktop.
+1. **Audio has never been confirmed audible.** The ASoC card registers
+   and the HDMI transmitter reports a valid audio format, but nobody has
+   heard a speaker.
+2. **There is no desktop on the TTY image.** That is deliberate: a
+   display manager takes the framebuffer from the text console, and a
+   desktop is a large amount of software the user may not want.
 
-   **Neither XFCE nor LightDM is part of the image, and neither is any other
-   desktop or display manager.** That is deliberate, and the image build
-   refuses to produce an image that contains one: a display manager takes the
-   framebuffer away from the text console, and a desktop is 450 MB of
-   packages that the user may not want.
-
-   Install a desktop when you want one:
+   `v0.6-desktop` did ship one, and its terminal text was unreadable —
+   the X server's screen pixmap was 24 bits deep inside a 32-bit
+   framebuffer. The fix needs upstream's `fb24_32` conversion, which this
+   version of the fbdev driver does not have. The desktop is frozen; the
+   plan is an optional package set after v0.7-tty. If you are running
+   v0.6 and want the console, mask the display manager:
 
    ```sh
-   tasksel
+   systemctl disable --now lightdm
+   systemctl mask lightdm
+   reboot
    ```
 
-   which offers XFCE, GNOME, KDE, LXDE and LXQt, and the Debian
-   `task-*-desktop` packages are the same thing. XFCE with LightDM is
-   confirmed to work here: it runs on X's *modesetting* driver, talking to
-   DRM directly, and the greeter is verified on a real display. The desktop
-   is not part of the image, so it is not part of what we tested — but the
-   display path underneath it is.
-
-   **Caveat, if you do install one:** the vendor's DRM driver never delivers
-   a vblank interrupt, so X's atomic commit waits out a 100 ms timeout,
-   warns, and the kernel oopses — which kills Xorg. The first paint takes
-   about 90 seconds, and on some boots X does not survive at all. It shows
-   up as a **frozen picture** on the TV rather than as a crash message. The
-   text console is unaffected, because it does not do a flip and so never
-   waits for a vblank.
+   Do **not** expect `tasksel` to give you a working desktop yet: it will
+   install one, and the text will be wrong for the reason above.
 3. **No GPU-accelerated 3D.** The vendor DRM driver advertises no dma-buf
-   modifier support, so Mesa's GBM has nothing to negotiate and `kmscube`
-   fails. A 2D desktop is unaffected — it does not need dma-buf — but
-   hardware-accelerated 3D is not available.
+   modifier support, so Mesa's GBM has nothing to negotiate. A 2D desktop
+   does not need it; 3D does.
 4. **The clock fallback is only unit-tested.** The chrony success path is
-   proven on hardware; the "no network at boot" path has not been exercised on
-   a real box.
-5. **The default root password is `tvbox`.** Change it from the console —
-   the HDMI one or the SSH one — before you put the box on a network you do
-   not trust.
-6. **Only one box has been tested.** Everything below was proven on one
-   development box. It has not been tested on any other hardware.
-7. **The first boot may need the vendor's own update path.** If your box does
-   not find `aml_autoscript` on the stick by itself, see
-   [`docs/recovery.md`](docs/recovery.md) — you will need a UART console once.
+   proven on hardware; the "no network at boot" path has not been
+   exercised on a real box.
+5. **The root password is published.** `root`/`tvbox` is in a public
+   repository. Change it before the box is on a network you do not trust:
+
+   ```sh
+   passwd
+   ```
+
+   The box also accepts root logins over SSH with that password. There is
+   no first-boot wizard yet; this is documented rather than fixed.
+6. **The kernel has no upstream security updates.** It is a vendor tree,
+   Linux 5.4.210, built from CoreELEC/Amlogic sources. The kernel package
+   makes a new kernel installable and a bad one reversible, but it does
+   not track upstream.
+7. **Only one box has been tested.** Everything here was proven on one
+   development box. It has not been validated on other hardware.
+8. **The first boot may need the vendor's own update path.** If your box
+   does not find `aml_autoscript` on the stick by itself, see
+   [`docs/recovery.md`](docs/recovery.md) — you will need a UART console
+   once.
 
 If you want to help finish it, see the roadmap below.
 
@@ -139,22 +163,23 @@ If you want to help finish it, see the roadmap below.
 
 **You may not need any of this.**
 
-A lot of the difficulty here is specific to *this* board and *this* bootloader:
+A lot of the difficulty here is specific to *this* board and *this*
+bootloader:
 
-- the vendor bootloader here cannot `booti` a PE/ZBOOT-wrapped kernel, which is
-  what essentially every distro ships — so a custom kernel has to be built
-- the internal Ethernet PHY lives on a private MDIO bus that mainline's device
-  tree does not describe, so mainline `stmmac` cannot drive it
-- the device tree shipped with the vendor kernel has two variants and the wrong
-  one aborts before the kernel prints anything
+- the vendor bootloader cannot `booti` a PE/ZBOOT-wrapped kernel, which is
+  what essentially every distro ships — so a custom kernel has to be built;
+- the internal Ethernet PHY lives on a private MDIO bus that mainline's
+  device tree does not describe, so mainline `stmmac` cannot drive it;
+- the device tree shipped with the vendor kernel has two variants and the
+  wrong one aborts before the kernel prints anything.
 
-If your box already boots mainline Linux from a USB stick, you need none of
-this and should stop reading. If you are hitting one of those specific walls,
-this repo may save you a week.
+If your box already boots mainline Linux from a USB stick, you need none
+of this and should stop reading. If you are hitting one of those specific
+walls, this repo may save you a week.
 
-The kernel here is built from **CoreELEC's `amlogic-5.4.210`** tree, which
-already supports this SoC properly. That is the single biggest reason this
-project is tractable.
+The kernel is built from **CoreELEC's `amlogic-5.4.210`** tree, which
+already supports this SoC properly. That is the single biggest reason
+this project is tractable.
 
 ---
 
@@ -179,19 +204,26 @@ BL2 → BL31 → U-Boot
 ```
 
 The stick is a **recovery key**, not a dependency: plug it in and the box
-boots the stick, unplug it and the box boots the eMMC. No menu, no countdown
-apart from the three-second U-Boot window.
+boots the stick; unplug it and the box boots the eMMC. No menu. The
+three-second U-Boot window exists only when no stick is attached: the
+vendor's own pre-boot chain runs the stick's autoscript before the
+countdown.
+
+`v0.7-tty` adds `console=tty0` to the kernel command line, so the boot log
+appears on HDMI as well as on the serial console.
 
 ### If something goes wrong
 
 There are three ways back in, in increasing order of effort:
 
-1. **Plug the stick in.** It boots a complete Linux system with SSH, whether
-   or not the eMMC works. This is why the stick is a recovery key.
-2. **Interrupt the boot at the U-Boot prompt.** `bootdelay` is set to 3, so
-   there is a three-second window with "Hit any key to stop autoboot". With
-   nothing but a serial adapter you can then boot a different `init=` — the
-   rootfs carries both `systemd` and a minimal `rescue-init.sh`:
+1. **Plug the stick in.** It boots a complete Linux system with SSH,
+   whether or not the eMMC works. This is why the stick is a recovery key.
+2. **Interrupt the boot at the U-Boot prompt.** Unplug the stick first —
+   with it attached the vendor's autoscript boots before the countdown.
+   `bootdelay` is 3, so there is a three-second window with "Hit any key
+   to stop autoboot". With nothing but a serial adapter you can boot a
+   different `init=` — the rootfs carries both `systemd` and a minimal
+   `rescue-init.sh`:
 
    ```
    setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 init=/root/rescue-init.sh'
@@ -200,8 +232,8 @@ There are three ways back in, in increasing order of effort:
    booti 0x2000000 - 0x5000000
    ```
 
-   To change the delay, `fw_setenv bootdelay 0` (faster boot, no window) or
-   any other value in seconds. The installer sets it to 3.
+   To change the delay, `fw_setenv bootdelay 0` (faster boot, no window)
+   or any other value in seconds. The installer sets it to 3.
 3. **Unlocking the bootloader** — ADNL and fastboot. See
    [`docs/recovery.md`](docs/recovery.md).
 
@@ -210,20 +242,26 @@ There are three ways back in, in increasing order of effort:
 ## Layout
 
 ```
+dist/                           build artefacts; README.md says which file is which release
 docs/
-  install-image-requirements.md   what the image must fix, and why
-  build-the-kernel.md             how the kernel was built; required for GPL compliance
+  README.md                       the map of the documentation, and the rules
+  releases/                       the release notes, immutable, plus errata
+  install-image-requirements.md   what the image must get right, and why
+  build-the-kernel.md             how the kernel is built; required for GPL compliance
   recovery.md                     unlock / ADNL / fastboot, and how to get back in
-  kernel-package.md              the kernel as an installable package, and the rollback
-  framebuffer.md                 how the display really works, and the tools that show it
+  kernel-package.md               the kernel as an installable package, and rollback
+  framebuffer.md                  how the display really works, and the tools that show it
   troubleshooting.md              the traps, written down so you can avoid them
   lessons.md                      engineering lessons from this project
+  licensing.md                    licences, credits, provenance
 manifest/
   required-packages.txt           packages the image must contain
   forbidden-packages.txt          packages it must not (no desktop, no display manager)
   required-paths.txt              files it must contain, with their modes
   forbidden-paths.txt             files it must not contain
+  forbidden-strings.txt           text that must not appear in the login files
   required-units.txt              systemd units it must have enabled
+  masked-units.txt                units that must be masked
   global.txt                      rules that apply to the whole rootfs
   boot-artifacts.txt              what must be at the root of the boot partition
   kernel-package.txt              what the kernel package must contain
@@ -239,32 +277,38 @@ scripts/
   build-stick-image.sh            build the published .img.gz from a rootfs tree
   build-kernel-package.sh         build the kernel as an installable .deb
   check-image.sh                  check an image (and a kernel package) against the manifest
+  check-patches.sh                prove the published patches build the tree
+  check-docs.sh                   prove the documentation does not contradict itself
   inventory.sh                    write down what is in an image, and diff it
   release.sh                      build a release, check it, print the test checklist
   write-stick-image.sh            write it to a stick and verify it byte-for-byte
+  overrides/                      files the image build substitutes for the vendor's
+  fbtools/                        small static tools that measure the framebuffer
   stick/                          the aml_autoscript uImage and its source
   uart/                           serial console tooling
 kernel/
   sc2_s905x4_ah212_linux.dtb
   SHA256SUMS
+  VERSION                         the project's release label for the kernel package
 patches/                          local patches applied to the vendor tree
 notes/journal.md                  chronological project log
 ```
 
 The kernel `Image` is a **release asset**, not in the repo — it is 34 MB.
-Download it from the Releases page and check it against `kernel/SHA256SUMS`.
+Download it from the Releases page and check it against
+`kernel/SHA256SUMS`.
 
 ---
 
 ## The manifest
 
 `manifest/` is the answer to "what is in this image, and what must be in
-it". It is **data**, not code: plain text files listing what the image
-must contain, what it must not, and which of the vendor's leftovers are
-still in there.
+it". It is **data**, not code: plain text files listing what the image must
+contain, what it must not, and which of the vendor's leftovers are still
+there.
 
-The build checks the image it has just produced against it and **refuses to
-produce an image that fails**. `scripts/check-image.sh` can also be run
+The build checks the image it has just produced against it and **refuses
+to produce an image that fails**. `scripts/check-image.sh` can also be run
 by hand against any rootfs tree:
 
 ```sh
@@ -279,32 +323,35 @@ Two things follow from this that are worth knowing:
   the same result as building once.
 * **The build is reproducible.** The filesystem's timestamps and UUIDs and
   the gzip header are all pinned, so the same tree gives the same image,
-  byte for byte. The image's hash is a statement about its content rather
-  than about when it was built.
+  byte for byte.
 
 `manifest/inventory.txt` lists every file in the image with its owner,
 mode, size and checksum. Every build prints the difference against it, so
 "what changed in this release" is a diff rather than a surprise.
 
+**The manifest states what is true.** A rule that is not enforced does not
+belong there; it belongs in `vendor-leftovers.txt` as a record. The vendor
+kernel modules are recorded there, with their cost, because they are still
+in the image — and the same is true of the vendor's branding packages.
+
 ---
 
 ## Roadmap
 
-| | Phase |
-|---|---|
-| P0 | boot chain, unattended eMMC boot — **done** |
-| P1 | networking, clock, SSH after boot — **done** |
-| P2 | automated installer: stick → box → standalone — **done** |
-| P3 | recovery `bootcmd`: stick present means "re-provision me" — **done** |
-| P4 | systemd — a real OS rather than a rescue shell — **done** |
-| P5a | text console on the HDMI output — **done** |
-| P5b | the vblank interrupt — the desktop path only; **parked** |
-| P5c | audio and WiFi — expected to work; neither verified by a human yet |
-| P6 | packaging that assumes nothing about *this* box — **mostly done** |
-| P7 | optional boot menu via `sysboot`/extlinux — deferred |
-| P8 | rollout to other hardware, once validated |
-| P9 | first-boot setup wizard, so the published root password goes away — v0.5 |
-| P10 | the manifest, the inventory, and a build that does not eat its input — **done** |
+The phases are the plan of record's, not a new numbering:
+
+| | Phase | State |
+|---|---|---|
+| H | documentation and housekeeping | **done** (2026-10-23) |
+| P0 | **v0.7-tty**: finish the base and release it | next; blocks everything else |
+| P1 | a solid base: audio, power, thermal, storage, smoke test | planned |
+| P2 | desktop, splash, and the boot experience | **frozen until v0.7 ships** |
+| P3 | hardware: a second box, then other devices | planned |
+
+The detailed plan, including what "done" means for each item, is
+`plan/PLAN-OF-RECORD.md` in the development repository (it is not part
+of this repository). The vblank-event work, an upstream `meson` port,
+Wayland and FbTerm are parked, each with its reason written down there.
 
 ---
 
@@ -323,6 +370,9 @@ Licensed by component, because they are not the same work:
 which is GPL-2.0, and the corresponding source for it is that upstream
 project. The kernel's source provenance is in
 [`docs/build-the-kernel.md`](docs/build-the-kernel.md), as GPL-2.0 requires.
+The base system is Debian, and remains Debian: `/etc/os-release` says so
+truthfully. The port identifies itself in `/etc/eon-release`, the login
+banner and the login message.
 
 Full detail, and the credits this project owes, are in
 [`docs/licensing.md`](docs/licensing.md).
@@ -335,4 +385,6 @@ Full detail, and the credits this project owes, are in
   documented way back in, and it needs the box in a known state.
 - If a box has had an OTA update, its bootloader has changed. A bootloader
   image from an un-updated unit is what the recovery path expects.
-- Back up anything you care about. Provisioning overwrites the eMMC user area.
+- Back up anything you care about. Provisioning overwrites the eMMC user
+  area.
+- The default password is published. Change it before the box is exposed.

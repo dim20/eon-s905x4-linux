@@ -28,7 +28,7 @@ than by repackaging anything:
   alongside. See the [devmfc repository](https://github.com/devmfc/debian-on-amlogic)
   for the build scripts and image sources.
 - **The kernel's corresponding source is published here**, in
-  [`docs/build-the-kernel.md`](docs/build-the-kernel.md), naming the exact
+  [`docs/build-the-kernel.md`](build-the-kernel.md), naming the exact
   upstream tree, branch, commit, our config and our patches, and the
   toolchain used. See also `kernel/GPL-2.0-NOTICE.md` and `patches/`.
 

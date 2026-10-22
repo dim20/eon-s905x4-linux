@@ -8,6 +8,17 @@ which claims were never tested is the lesson.
 **Identifiers are redacted** (`<MAC>`, `<SERIAL>`, `<ANDROID_ID>`, `<BOARD_SERIAL>`,
 `<USB_SERIAL>`).
 
+> **STATUS 2026-10-23 — this journal ends on 2026-10-19.** The status text
+> further down that says "kernel 6.18.55-meson64, booted manually from
+> U-Boot" is **superseded**: the box now boots Linux 5.4.210 from eMMC
+> with systemd and a text console on HDMI, and the latest TTY release is
+> **v0.5.1**. Current state is in [`../README.md`](../README.md), and the
+> plan is `plan/PLAN-OF-RECORD.md` in the development repository (not
+> part of this one); the later findings are in the lab notebook
+> (`notes.md` in the development repository). The body is kept unedited:
+> it records what was believed at the time, which is the point of a
+> journal.
+
 **Start with [`../docs/lessons.md`](../docs/lessons.md) and
 [`../docs/troubleshooting.md`](../docs/troubleshooting.md)** if you are here to
 fix something rather than read history.

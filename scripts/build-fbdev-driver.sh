@@ -3,6 +3,11 @@
 #
 #   usage: scripts/build-fbdev-driver.sh [--box <host>] [--install]
 #
+# STATUS: FROZEN (P2, desktop). This is not run by any release target and
+# its output is not in any published image. The TTY product does not need
+# it. It is kept because it records the fb24_32 work, and it will come
+# back with the optional desktop package set after v0.7-tty.
+#
 # WHY
 #
 # The X server's screen visual is 24 bits deep inside a 32-bit

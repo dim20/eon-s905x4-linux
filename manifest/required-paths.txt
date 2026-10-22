@@ -34,15 +34,25 @@
 # PrivateUsers for that unit.
 /etc/systemd/system/chrony-wait.service.d/10-no-private-users.conf 0644
 
-# --- our login banner ----------------------------------------------------
+# --- our login branding ---------------------------------------------------
 # The vendor replaced Debian's login-message hooks with their own, by
 # symlinking /etc/update-motd.d/<name> to /usr/lib/qubian/update-motd.d/
 # <name>. Their hooks print terminal escape sequences and Amlogic branding,
 # and the framebuffer console on the HDMI output is not a terminal
 # emulator: it rendered them as literal "\e[0;91m" text on the television.
 # These are ours, and they are plain text.
-/etc/update-motd.d/01-quban-header 0755
-/etc/update-motd.d/15-qubian-system-state 0755
+#
+# /etc/issue and /etc/issue.net are replaced by regular files, not left as
+# the vendor's symlinks into /usr/lib/qubian. The build installs all four
+# from scripts/overrides/ (see the "etc" and "motd" cases), so they are
+# reproduced by a build rather than hand-edited on a box. The product
+# identity lives in /etc/eon-release; /etc/os-release is untouched and
+# still says Debian, which is true.
+/etc/issue 0644
+/etc/issue.net 0644
+/etc/eon-release 0644
+/etc/update-motd.d/01-eon-header 0755
+/etc/update-motd.d/15-eon-system-state 0755
 
 # --- the programs the image's own scripts and services need --------------
 /usr/bin/rsync 0755

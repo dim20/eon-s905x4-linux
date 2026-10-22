@@ -1,0 +1,7 @@
+ EON Linux
+ Debian on the EON SDSTB02 (Amlogic S905X4)
+
+ Authorised use only.
+
+ The default login root/tvbox is published. Change it with 'passwd'
+ before this system is exposed to a network you do not trust.

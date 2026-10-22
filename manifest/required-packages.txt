@@ -27,8 +27,16 @@ bash
 dash
 
 # --- the login console on the television ----------------------------------
-# The HDMI output is programmed at boot by enable-hdmi.sh, which needs
-# modetest from libdrm-tests. Without it the television stays black.
+# Two things put a picture on the television, and both are on purpose:
+#
+#   * the DRM driver modesets when the framebuffer console binds to it;
+#   * enable-hdmi.service runs /root/enable-hdmi.sh, which sets the mode
+#     with modetest.
+#
+# The unit is belt-and-braces. Early boots left the connector disabled, and
+# a mode set is runtime state, so the script makes the result independent
+# of driver probe order. modetest is in libdrm-tests; the package is
+# required only while that unit exists.
 libdrm-tests
 libdrm2
 libdrm-common
@@ -57,10 +65,18 @@ console-setup
 passwd
 adduser
 
-# --- the desktop is the user's choice, made afterwards --------------------
-# tasksel is what makes that choice possible. tasksel-data is what makes
-# tasksel OFFER anything: without it the task list is empty and the
-# command does nothing at all.
+# --- the optional desktop, later -----------------------------------------
+# NOT a claim that a working desktop can be installed today. It cannot:
+# v0.6-desktop's text was unreadable (docs/releases/errata-v0.6.md), and
+# the desktop is frozen until after v0.7-tty.
+#
+# tasksel and tasksel-data are in the base because the next phase will
+# build the optional `eon-desktop` package set on Debian's own task
+# mechanism, and because removing them from an existing image means
+# editing dpkg by hand. When `eon-desktop` lands, it should wrap or
+# replace tasksel rather than depend on the user knowing which task to
+# pick. Until then, running tasksel installs a desktop whose text is
+# wrong. The build keeps them present; it does not advertise them.
 tasksel
 tasksel-data
 
