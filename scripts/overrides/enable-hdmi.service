@@ -1,35 +1,35 @@
 [Unit]
 Description=Enable the HDMI display output
 Documentation=man:modetest(1)
-# Runs EARLY, and on purpose.
+# NB: deliberately NO dependency on dev-dri-card0.device.
 #
-# This unit is what puts the first picture on the screen, so it has to run
-# before the boot messages have scrolled off. Ordered after multi-user it did
-# not: multi-user waits for the root device unit to settle, which on a USB
-# stick is ~17 s, and the display came up long after the interesting part of
-# the boot had gone. So it is ordered into sysinit, with no default
-# dependencies (those would order it after sysinit.target and create a cycle).
+# That device unit never settles on this box — udev does not finish
+# processing the DRM device — so depending on it leaves
+# multi-user.target WAITING FOREVER and the system stops at "starting".
+# The DRM driver has already created the connector by the time this unit
+# runs, so the dependency buys nothing and costs the whole boot.
 #
-# The ordering alone is not enough: started this early it can beat udev, so
-# enable-hdmi.sh WAITS for /dev/dri/card0 and retries the mode set. Without
-# that, a run that lost the race would leave the screen black for the whole
-# boot - the failure mode the old ConditionPathExists had.
+# This ran once ordered into sysinit (DefaultDependencies=no,
+# Before=sysinit.target) to try to get a picture on the screen before the
+# boot messages scrolled away. It did not: on a USB stick the root device
+# unit and udev delay even sysinit by ~25 s, so the display moved from
+# ~43 s to ~35 s - while the whole boot now WAITED for modetest, costing
+# ~5 s every time. Reverted. See plan/PLAN-OF-RECORD.md, P0-3.
 #
-# There is deliberately NO ConditionPathExists on the connector any more, and
-# no dependency on dev-dri-card0.device: that device unit never settles on
-# this box (udev does not finish with the DRM device), so depending on it
-# leaves multi-user.target waiting forever. The script waits instead.
-DefaultDependencies=no
-After=systemd-udevd.service systemd-udev-trigger.service
-Before=sysinit.target
+# If the connector is not there yet, the script waits for it briefly
+# (and retries the mode set) before giving up; nothing is skipped.
+ConditionPathExists=/sys/class/drm/card0-HDMI-A-1/status
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+# The vendor driver leaves the HDMI connector disabled, so the screen stays
+# blank until a mode is set. A mode set is runtime state and has to be
+# redone on every boot.
 ExecStart=/root/enable-hdmi.sh
 # Never let a display problem stop the box from reaching multi-user.
 SuccessExitStatus=0
 TimeoutStartSec=30
 
 [Install]
-WantedBy=sysinit.target
+WantedBy=multi-user.target
