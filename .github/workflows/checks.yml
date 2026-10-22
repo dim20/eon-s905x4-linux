@@ -1,0 +1,39 @@
+name: checks
+
+# The repository's text, checked on every push.
+#
+# This does NOT build anything: no kernel, no image, no rootfs tree. Those
+# need a toolchain, a loop device and a box, and they are the release
+# checklist's job (docs/releases/README.md), run locally.
+#
+# What it does catch, cheaply: a dead documentation link, a release note
+# that README forgets to mention, a vendor string reappearing in the login
+# branding, a manifest-required file losing its override source, and a shell
+# or Python syntax error in a published script.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  repo-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: documentation
+        run: ./scripts/check-docs.sh
+
+      - name: shell syntax
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            # Anything whose shebang is not a shell is not ours to parse
+            # with bash (one file under scripts/ is Python with a .sh name).
+            head -1 "$f" | grep -qE '^#!.*(sh|bash)' || continue
+            bash -n "$f" || fail=1
+          done < <(find scripts -name '*.sh')
+          exit "$fail"
+
+      - name: python syntax
+        run: python3 -m compileall -q scripts/uart scripts/kernel-package

@@ -243,6 +243,7 @@ There are three ways back in, in increasing order of effort:
 ## Layout
 
 ```
+.github/workflows/checks.yml     CI: check-docs.sh + script syntax on every push
 dist/                           build artefacts; README.md says which file is which release
 docs/
   README.md                       the map of the documentation, and the rules
