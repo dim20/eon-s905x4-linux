@@ -15,11 +15,27 @@
 #
 # It is safe to re-run: it does nothing if p2 already fills the device.
 #
-# Run it on the HOST (not on the box) with the stick plugged in, OR on the box
-# if you booted from the stick — in which case p2 is the running root and you
-# cannot resize it in place. See the note at the end.
+# Run it on the HOST (not on the box) with the stick plugged in.
 #
 #   sudo ./grow-stick.sh /dev/sdb
+#
+# THE ONE CASE IT REFUSES, AND WHAT TO DO INSTEAD
+# If you booted from the stick, p2 is the running root, and this script
+# refuses: it runs e2fsck first, and e2fsck cannot run on a mounted
+# filesystem. Growing the running root *is* possible without the fsck, and
+# it is how the test box's stick went from 770 MiB (0 free) to 7.1 GiB
+# (6.1 GiB free) on 2026-10-23, online and without a reboot:
+#
+#     LAST=$(( $(blockdev --getsz /dev/sda) - 1 ))    # last sector
+#     parted -s /dev/sda unit s resizepart 2 "$LAST"  # rewrite the entry
+#     cat /sys/class/block/sda2/size                  # kernel re-reads it
+#     resize2fs /dev/sda2                             # ext4 online grow
+#     df -h /
+#
+# The kernel accepts a partition *grow* on a mounted disk and updates the
+# block device size there and then, which is what makes the online
+# resize2fs possible. The missing e2fsck is the risk: if the filesystem is
+# not clean, do it from a host instead. If in doubt, use the host.
 #
 # Linux distros ship ISOs and the installer uses the whole disk; this is the
 # equivalent for a stick that is both a boot medium and a live system.
