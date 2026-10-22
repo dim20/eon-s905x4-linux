@@ -35,8 +35,13 @@ driver does not.
 
 **Evidence, reproducible:** `xwd` (the X server's own dump of the root
 window) reported 32 bits per pixel with a 7680-byte stride while the glyphs
-in `/dev/fb0` were laid out at 24 bits. `scripts/fbtools/fbcmp` compares the
-two and was the instrument that settled it.
+in `/dev/fb0` were laid out at 24 bits. `fbprobe` in
+[`../../scripts/fbtools/`](../../scripts/fbtools/) shows the same thing
+directly: read the same
+bytes as 24-bit pixels and as 32-bit pixels, and they disagree — that is the
+smearing. The pixel-by-pixel diff against the server's dump was done with a
+throwaway program that was not kept, so `docs/framebuffer.md` describes the
+method and `fbprobe`/`fbregion` reproduce it.
 
 ## Correction 2 — the "missing flush" and the mmap theory
 
