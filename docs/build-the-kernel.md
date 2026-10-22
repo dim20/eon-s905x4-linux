@@ -72,18 +72,24 @@ make ARCH=arm64 CROSS_COMPILE=$CROSS_COMPILE O=out meson64_a64_P_defconfig
 
 ### 3. Config delta — [`0002-option-D.config.delta`](../patches/0002-option-D.config.delta)
 
+Apply **every** `=y` line in the file, not a hand-copied list:
+
 ```sh
-./scripts/config --file out/.config --enable AMLOGIC_MEDIA_VIDEOCAPTURE
+grep '^CONFIG_[A-Z0-9_]*=y' ../patches/0002-option-D.config.delta |
+while IFS='=' read -r sym value; do
+    ./scripts/config --file out/.config --enable "${sym#CONFIG_}"
+done
 ```
 
-**Why:** `drivers/amlogic/media/video_sink/video_hw.c` uses
-`vd_layer[].capture_use_cnt`, `.capture_frame_req` and `CAPTURE_STATE_*`
-unconditionally, but all three are inside
-`#ifdef CONFIG_AMLOGIC_MEDIA_VIDEOCAPTURE` in `video_priv.h`. The defconfig does
-not enable it, so **the tree does not compile as shipped**. The `.c` is right
-and the defconfig is incomplete, so enabling the option is the correct fix.
+| Symbol | Why |
+|---|---|
+| `AMLOGIC_MEDIA_VIDEOCAPTURE` | `video_hw.c` uses `vd_layer[].capture_use_cnt`, `.capture_frame_req` and `CAPTURE_STATE_*` unconditionally, but they are inside `#ifdef CONFIG_AMLOGIC_MEDIA_VIDEOCAPTURE` in `video_priv.h`. The defconfig does not enable it, so **the tree does not compile as shipped**. |
+| `DRM_MESON_EMULATE_FBDEV` | the vendor DRM's framebuffer emulation is behind this option. Without it there is no `/dev/fb0` from the DRM driver — only the OSD overlays, which have no usable weights. |
+| `FRAMEBUFFER_CONSOLE` | this kernel has `CONFIG_VT_CONSOLE=y` but no framebuffer console, so nothing scans the VT out to HDMI. |
+| `FRAMEBUFFER_CONSOLE_DETECT_PRIMARY` | lets fbcon choose the real framebuffer rather than the first one it finds. |
+| `FRAMEBUFFER_CONSOLE_DEFERRED_TAKEOVER` | waits for the display pipeline before taking the console over, instead of taking it over at 0.7 s and dying. |
 
-Verified this survives `syncconfig`.
+Verified to survive `syncconfig`.
 
 > **Trap:** this tree does not let you simply switch a symbol off. Writing
 > `# CONFIG_SYSTEM_TRUSTED_KEYRING is not set` into `out/.config` and running

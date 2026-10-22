@@ -74,7 +74,8 @@ sha256sum -c SHA256SUMS
 scripts/check-image.sh --rootfs /path/to/tree --p1 /path/to/p1.img
 
 # the published patches reproduce the tree the kernel is built from
-(cd ../amlogic && scripts/check-patches.sh ../eon-s905x4-linux/patches)
+# (needs a clean CoreELEC amlogic-5.4.210 checkout; see build-the-kernel.md)
+scripts/check-patches.sh patches /path/to/linux-amlogic
 
 # the documentation does not contradict itself
 scripts/check-docs.sh

@@ -56,8 +56,9 @@ v0.7-tty):
   why the two differ;
 - `scripts/check-patches.sh`, which proves the published patches
   reproduce the build tree;
-- the corrected build script that can no longer silently drop
-  `CONFIG_DRM_MESON_EMULATE_FBDEV`;
+- the corrected build recipe: `patches/0002-option-D.config.delta` is
+  applied as a file, so an option cannot be silently dropped again (the
+  development repository's build script reads the same file);
 - brand-new login branding (see below).
 
 ## Quick start
@@ -342,7 +343,7 @@ The phases are the plan of record's, not a new numbering:
 
 | | Phase | State |
 |---|---|---|
-| H | documentation and housekeeping | **done** (2026-10-23) |
+| H | documentation and housekeeping | **H1–H8 done** (2026-10-23); H9 fresh-eyes review is next |
 | P0 | **v0.7-tty**: finish the base and release it | next; blocks everything else |
 | P1 | a solid base: audio, power, thermal, storage, smoke test | planned |
 | P2 | desktop, splash, and the boot experience | **frozen until v0.7 ships** |
