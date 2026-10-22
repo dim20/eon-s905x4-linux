@@ -10,7 +10,11 @@ Three changes that together make the text console work on the HDMI output.
    framebuffer's own geometry when the CRTC has no mode yet.
 
 2. The same file marks the primary plane's framebuffer with the new
-   FBINFO_PRIMARY flag.
+   FBINFO_PRIMARY flag, in the probe callback. The probe runs before the
+   framebuffer is registered, and fbcon reads the flag when it is
+   registered (fbcon_select_primary), so setting it later - after
+   register_framebuffer() has already run - is too late: the console has
+   already decided, and it binds to the first framebuffer there was.
 
 3. drivers/video/fbdev/core/fbcon.c: fbcon now honours FBINFO_PRIMARY, and
    con2fb_map_boot is initialised to -1 instead of 0. It is compared
@@ -33,10 +37,18 @@ console's blitter writes to an unmapped address and the machine oopses:
 ---
 
 diff --git a/drivers/amlogic/drm/meson_fbdev.c b/drivers/amlogic/drm/meson_fbdev.c
-index fdc44002e..ed4cfaf9c 100644
 --- a/drivers/amlogic/drm/meson_fbdev.c
 +++ b/drivers/amlogic/drm/meson_fbdev.c
-@@ -572,10 +572,23 @@ static int am_meson_drm_fbdev_probe(struct drm_fb_helper *helper,
+@@ -562,7 +562,7 @@
+ 	fb = helper->fb;
+ 
+ 	fbi->par = helper;
+-	fbi->flags = FBINFO_FLAG_DEFAULT;
++	fbi->flags = FBINFO_FLAG_DEFAULT | FBINFO_PRIMARY;
+ 	fbi->fbops = &meson_drm_fbdev_ops;
+ 	fbi->skip_vt_switch = true;
+ 	fbi->screen_size = fb->pitches[0] * fb->height;
+@@ -572,10 +572,23 @@
  	am_meson_drm_fbdev_modeset_create(helper);
  
  	drm_mode_get_hv_timing(&fbdev->modeset.crtc->mode, &hdisplay, &vdisplay);
@@ -62,7 +74,7 @@ index fdc44002e..ed4cfaf9c 100644
  
  	return 0;
  
-@@ -722,6 +735,15 @@ int am_meson_drm_fbdev_init(struct drm_device *dev)
+@@ -722,6 +735,15 @@
  	if (drmdev->primary_plane) {
  		fbdev = am_meson_create_drm_fbdev(dev, drmdev->primary_plane);
  		fbdev->zorder = OSD_PLANE_BEGIN_ZORDER;

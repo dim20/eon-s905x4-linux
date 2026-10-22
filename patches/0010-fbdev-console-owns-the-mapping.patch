@@ -1,0 +1,117 @@
+The console owns the framebuffer's mapping, so a close must not clear it
+
+fbcon calls fb_open(info, 0) when it takes the display over, so the
+console holds a reference to the framebuffer's mapping of its own. It
+then draws through info->screen_base for as long as it is on the display.
+
+0007 made am_meson_fbdev_release() unmap the buffer, and the unmap ended
+by setting info->screen_base = NULL. That is right when the framebuffer
+is being replaced or torn down, and wrong when a *user* closes /dev/fb0:
+the console is still drawing through screen_base, and the next
+cursor-blink took the kernel down -
+
+    Workqueue: events_power_efficient fb_flashcursor
+    pc : cfb_imageblit+0x810/0x8c0
+    Call trace: cfb_imageblit -> drm_fb_helper_cfb_imageblit ->
+                soft_cursor -> bit_cursor -> fb_flashcursor
+    FAR : 0000000000000200        (a WRITE through a NULL screen base)
+    Kernel panic - not syncing: Fatal exception
+
+Reproduced on 2026-10-23: fbhash - open, mmap, read and close /dev/fb0 -
+panicked the box twelve seconds after the close, while the console had
+been drawing happily for two hours past the 62-second CMA release. So the
+close path, not the CMA release, is what kills the box.
+
+What this patch does:
+
+  * am_meson_fbdev_put_fb_gem_refs() drops the references an open took,
+    and touches nothing else;
+
+  * the release path uses it, so closing /dev/fb0 no longer takes the
+    mapping away from the console;
+
+  * am_meson_fbdev_unmap_fb_gem() keeps its meaning - drop the references
+    AND clear screen_base - for the places where nothing can be drawing
+    through it any more: a buffer being replaced, or the framebuffer
+    going away.
+
+diff --git a/drivers/amlogic/drm/meson_fbdev.c b/drivers/amlogic/drm/meson_fbdev.c
+--- a/drivers/amlogic/drm/meson_fbdev.c
++++ b/drivers/amlogic/drm/meson_fbdev.c
+@@ -108,14 +108,19 @@
+ }
+ 
+ /*
+- * am_meson_fbdev_unmap_fb_gem - unmap the framebuffer's buffer
++ * am_meson_fbdev_put_fb_gem_refs - give back the references an open took
+  * @info: fb_info structure
+  *
+- * The buffer itself is NOT freed here. It belongs to the framebuffer,
+- * not to the open file - see am_meson_fbdev_release() for why that
+- * matters.
++ * The references are dropped; the mapping is not. The console holds a
++ * reference of its own - fbcon calls fb_open(info, 0) when it takes the
++ * display over - and it draws through info->screen_base for as long as it
++ * is on the display.
++ *
++ * Clearing screen_base when a *user* closed /dev/fb0 took the console's
++ * memory away from it: the cursor-blink timer kept drawing, the next
++ * blink went through a NULL screen_base, and the kernel panicked.
+  */
+-static void am_meson_fbdev_unmap_fb_gem(struct fb_info *info)
++static void am_meson_fbdev_put_fb_gem_refs(struct fb_info *info)
+ {
+ 	struct drm_fb_helper *helper = info->par;
+ 	struct meson_drm_fbdev *fbdev;
+@@ -134,7 +139,23 @@
+ 
+ 	dma_buf_put(meson_gem->dmabuf);
+ 	ion_buffer_kmap_put(meson_gem->ionbuffer);
++}
+ 
++/*
++ * am_meson_fbdev_unmap_fb_gem - drop the references and the kernel mapping
++ * @info: fb_info structure
++ *
++ * The buffer itself is NOT freed here. It belongs to the framebuffer,
++ * not to the open file - see am_meson_fbdev_release() for why that
++ * matters.
++ *
++ * This is only for the places where nothing can be drawing through
++ * screen_base any more: the buffer is being replaced, or the framebuffer
++ * is going away.
++ */
++static void am_meson_fbdev_unmap_fb_gem(struct fb_info *info)
++{
++	am_meson_fbdev_put_fb_gem_refs(info);
+ 	info->screen_base = NULL;
+ }
+ 
+@@ -235,7 +256,8 @@
+ static int am_meson_fbdev_release(struct fb_info *info, int arg)
+ {
+ 	/*
+-	 * Unmap the buffer, but do NOT free it.
++	 * Give back the reference this open took. Do NOT free the buffer,
++	 * and do NOT take the mapping away.
+ 	 *
+ 	 * The buffer belongs to the framebuffer, not to the open file:
+ 	 *
+@@ -248,9 +270,15 @@
+ 	 *     showing the OLD one - a stale frame - while the new client
+ 	 *     drew into the new one.
+ 	 *
+-	 * It is freed when the framebuffer goes away.
++	 * The mapping belongs to the framebuffer too. The console has a
++	 * reference of its own (fbcon calls fb_open(info, 0) when it takes
++	 * the display over) and draws through screen_base; clearing it here
++	 * left the console's cursor timer writing through NULL and
++	 * panicked the kernel. See am_meson_fbdev_put_fb_gem_refs().
++	 *
++	 * The buffer is freed when the framebuffer goes away.
+ 	 */
+-	am_meson_fbdev_unmap_fb_gem(info);
++	am_meson_fbdev_put_fb_gem_refs(info);
+ 	return 0;
+ }
+ 
