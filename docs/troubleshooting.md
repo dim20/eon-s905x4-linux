@@ -121,7 +121,7 @@ setenv bootcmd "mmc dev 1; mmc rescan; \
   ext4load mmc 1:1 0x2000000 Image; \
   ext4load mmc 1:1 0x5000000 sc2_s905x4_ah212_linux.dtb; \
   setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw \
-    console=ttyS0,921600 console=tty0 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend \
+    console=ttyS0,921600 earlycon=amlogic,meson-uart,0xfe07a000 no_console_suspend \
     nowatchdog pd_ignore_unused clk_ignore_unused TERM=vt220 maxcpus=4 \
     init=/root/rescue-init.sh'; \
   booti 0x2000000 - 0x5000000"

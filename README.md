@@ -227,8 +227,17 @@ three-second U-Boot window exists only when no stick is attached: the
 vendor's own pre-boot chain runs the stick's autoscript before the
 countdown.
 
-`v0.7-tty` adds `console=tty0` to the kernel command line, so the boot log
-appears on HDMI as well as on the serial console.
+**The serial port is the kernel console; the screen is a virtual
+terminal.** The kernel command line keeps `console=ttyS0,921600` and
+nothing else, so the full boot log goes to the serial port and stays
+there, and `getty` on `tty1` gives you a login prompt on HDMI — the usual
+Linux arrangement, with `Ctrl-Alt-F1`…`F6` for the other terminals.
+
+Adding `console=tty0` would put the kernel's own messages on the screen as
+well, and it was tried. It is not what puts the login prompt there (that
+is `getty` + the framebuffer console), and it means a driver logging a
+line at 62 seconds lands in the middle of the login prompt. Left out on
+purpose.
 
 ### If something goes wrong
 
@@ -244,7 +253,7 @@ There are three ways back in, in increasing order of effort:
    `rescue-init.sh`:
 
    ```
-   setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 console=tty0 init=/root/rescue-init.sh'
+   setenv bootargs 'root=/dev/mmcblk0p2 rootfstype=ext4 rootwait rw console=ttyS0,921600 init=/root/rescue-init.sh'
    ext4load mmc 1:1 0x2000000 Image
    ext4load mmc 1:1 0x5000000 sc2_s905x4_ah212_linux.dtb
    booti 0x2000000 - 0x5000000
