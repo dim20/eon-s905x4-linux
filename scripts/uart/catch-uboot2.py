@@ -9,7 +9,8 @@ import termios
 import time
 
 PORT = sys.argv[1] if len(sys.argv) > 1 else "/dev/ttyUSB0"
-LOG = sys.argv[2] if len(sys.argv) > 2 else "/home/dim20/Projects/amlogic/dev/serial/catch.log"
+LOG = sys.argv[2] if len(sys.argv) > 2 else os.environ.get(
+    "CATCH_LOG", "/tmp/opencode/catch.log")
 DUR = float(sys.argv[3]) if len(sys.argv) > 3 else 90.0
 BAUD = int(sys.argv[4]) if len(sys.argv) > 4 else 1500000
 
