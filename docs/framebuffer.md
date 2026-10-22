@@ -262,3 +262,42 @@ the published patches are worth publishing.
 It found that `0005-no-osd-framebuffers.patch` did not apply at all: it
 had been generated against a tree that already had part of its own
 change in it. The patches now apply, and reproduce the tree exactly.
+
+> **And on 2026-10-23 it found a second drift, because it was finally run
+> again.** The tree had been setting `FBINFO_PRIMARY` in the driver's
+> probe callback — the fix for "the flag is set too late" — while patch
+> `0003` only set it in `am_meson_drm_fbdev_init`, after
+> `register_framebuffer()` had already run. The published patches would
+> therefore have built a kernel where the console binds to the first
+> framebuffer that registered, which is the bug `0003` is named after.
+> The lesson is not "write a check" — the check existed — it is "run it".
+> The repaired `0003` is in the repository, and the series reproduces the
+> tree again.
+
+### The console's mapping, and why a close must not clear it
+
+`fbcon` calls `fb_open(info, 0)` when it takes the display over, so the
+console holds a reference to the framebuffer's mapping of its own and
+draws through `info->screen_base` for as long as it is on the display.
+
+Patch `0007` made `am_meson_fbdev_release()` unmap the buffer on close,
+and the unmap ended by setting `info->screen_base = NULL`. Dropping the
+reference is right — it balances the open — but clearing the pointer is
+not: the console's reference is still there and its cursor timer is still
+drawing. Closing `/dev/fb0` therefore panicked the kernel, twelve seconds
+later, on the next cursor blink:
+
+```
+Workqueue: events_power_efficient fb_flashcursor
+pc : cfb_imageblit+0x810/0x8c0
+     drm_fb_helper_cfb_imageblit → soft_cursor → bit_cursor → fb_flashcursor
+FAR : 0000000000000200        (a write through NULL)
+Kernel panic - not syncing: Fatal exception
+```
+
+It was reproduced on 2026-10-23 with `fbhash` — open, mmap, read, close —
+on a box that had been up for two hours past the 62-second CMA release.
+So the CMA release was never the killer; the close path was. Patch `0010`
+splits the unmap: a close drops its references and leaves the mapping
+alone, and only a buffer being replaced or the framebuffer going away
+clears `screen_base`.

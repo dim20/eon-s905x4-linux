@@ -155,6 +155,23 @@ These are real and will bite you:
    does not find `aml_autoscript` on the stick by itself, see
    [`docs/recovery.md`](docs/recovery.md) — you will need a UART console
    once.
+9. **Opening `/dev/fb0` panics the box — on v0.5.1, v0.6, and any image
+   built before v0.7.** The text console itself is fine, and it draws all
+   day. But any program that opens `/dev/fb0` — `fbset`, a framebuffer
+   tool, an X server — closes it again, and the kernel panics a few
+   seconds later: the framebuffer console's cursor puts the mapping back
+   down and the next blink writes through a NULL screen base.
+
+   ```
+   fb_flashcursor -> bit_cursor -> soft_cursor ->
+   drm_fb_helper_cfb_imageblit -> cfb_imageblit   (write to NULL + 0x200)
+   Kernel panic - not syncing: Fatal exception
+   ```
+
+   Reproduced on 2026-10-23 on the test box, with the serial console
+   capturing the panic. **Until you are running v0.7-tty, do not open
+   `/dev/fb0` on a released image.** The fix is in the v0.7 kernel; see
+   [`docs/framebuffer.md`](docs/framebuffer.md) for the mechanism.
 
 If you want to help finish it, see the roadmap below.
 
