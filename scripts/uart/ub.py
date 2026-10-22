@@ -15,7 +15,10 @@ import time
 
 PORT = "/dev/ttyUSB0"
 BAUD = 1000000
-LOG = "/home/dim20/amlogic/serial/ub.log"
+# Default log path: $UB_LOG, or ./ub.log in the current directory. It used to
+# be an absolute path into one particular development tree, which made the
+# tool unusable anywhere else.
+LOG = os.environ.get("UB_LOG", "ub.log")
 CMDS = []
 
 a = list(sys.argv[1:])

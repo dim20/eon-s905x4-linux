@@ -14,3 +14,7 @@ dist/*
 *.img
 *.xz
 *.tmp
+
+# python bytecode (the UART tools are Python)
+__pycache__/
+*.pyc

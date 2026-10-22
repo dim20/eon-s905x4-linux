@@ -1,20 +1,26 @@
 #!/bin/sh
 # Arm the U-Boot autoboot interceptor.
-#   usage: scripts/arm.sh [seconds] [logfile]
+#
+#   usage: scripts/uart/arm.sh [seconds] [logfile]
+#
 # Always run this BEFORE asking the user to power-cycle. The catcher exits on
 # its own timeout, so it must be re-armed for every cycle - do not assume the
 # previous one is still alive.
+#
+# It writes the capture to the log file you name, or to
+# /tmp/opencode/catch-<time>.log by default. It does not care where the
+# repository is checked out.
 #
 # NOTE: do NOT use `pkill -f catch-uboot2.py` to clean up. The -f pattern also
 # matches the shell that is running this script (its command line contains the
 # script text), so pkill kills the invoking shell itself -> "Killed by SIGTERM".
 # We track the PID in a pidfile instead.
 set -e
-cd "$(dirname "$0")/.."
+HERE="$(cd "$(dirname "$0")" && pwd)"
 SECS=${1:-3600}
-LOG=${2:-serial/catch-$(date +%H%M%S).log}
+LOG=${2:-/tmp/opencode/catch-$(date +%H%M%S).log}
 PIDFILE=/tmp/opencode/catcher.pid
-mkdir -p serial /tmp/opencode
+mkdir -p /tmp/opencode
 
 # Auto-detect the UART adapter. Do NOT hardcode /dev/ttyUSB0: the device
 # re-enumerates (e.g. when another USB device is unplugged, the whole USB bus
@@ -33,7 +39,7 @@ if [ -f "$PIDFILE" ]; then
   rm -f "$PIDFILE"
 fi
 
-nohup python3 scripts/catch-uboot2.py "$PORT" "$PWD/$LOG" "$SECS" 1000000 \
+nohup python3 "$HERE/catch-uboot2.py" "$PORT" "$LOG" "$SECS" 1000000 \
   > /tmp/opencode/catcher.out 2>&1 &
 NEW=$!
 echo "$NEW" > "$PIDFILE"
