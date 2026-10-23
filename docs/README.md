@@ -20,6 +20,7 @@ general-purpose Linux computer. It is not a media centre.
 | fix a box that will not boot | [`recovery.md`](recovery.md) |
 | rebuild the kernel or the image | [`build-the-kernel.md`](build-the-kernel.md), [`kernel-package.md`](kernel-package.md) |
 | understand the display path | [`framebuffer.md`](framebuffer.md) |
+| understand storage, TRIM and eMMC wear | [`storage.md`](storage.md) |
 | avoid a trap we already hit | [`troubleshooting.md`](troubleshooting.md), [`lessons.md`](lessons.md) |
 | know the licensing | [`licensing.md`](licensing.md) |
 
