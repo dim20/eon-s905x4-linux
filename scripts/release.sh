@@ -161,6 +161,7 @@ checks are done; these are the ones that cannot be.
 
       findmnt -n -o SOURCE /          # /dev/mmcblk0p2
       dmesg | grep -c "Taking over console"   # 1
+      /root/smoke-test.sh             # exit 0, no failures
 
 - [ ] Confirm the stick does NOT grow any more: the vendor's stick-growing
       script has been removed from the image.

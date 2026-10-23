@@ -587,7 +587,7 @@ fi
 # The rest of the scripts the image needs in /root. Installing them here
 # means a build from a plain Debian rootfs is complete, rather than relying
 # on the source tree having been prepared with them already.
-for s in rescue-init.sh install-to-emmc.sh find-env.sh prepare-stick.sh grow-stick.sh; do
+for s in rescue-init.sh install-to-emmc.sh find-env.sh prepare-stick.sh grow-stick.sh smoke-test.sh; do
     [ -f "$HERE/$s" ] || continue
     cp -a "$HERE/$s" "$ROOTFS_TREE/root/$s"
     chmod 0755 "$ROOTFS_TREE/root/$s"

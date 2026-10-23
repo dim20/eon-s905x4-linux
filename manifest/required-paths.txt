@@ -21,6 +21,7 @@
 /root/find-env.sh 0755
 /root/prepare-stick.sh 0755
 /root/grow-stick.sh 0755
+/root/smoke-test.sh 0755
 
 # --- the units the image needs -------------------------------------------
 # enable-hdmi.service programs the HDMI output at boot. The vendor driver

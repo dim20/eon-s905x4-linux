@@ -3,6 +3,20 @@
 Every entry here is a fault that actually happened on this hardware. They are
 ordered roughly by how much time they cost.
 
+**Before diagnosing anything, run the smoke test.** On the box:
+
+```
+/root/smoke-test.sh
+```
+
+It reports the branding, the console arrangement, failed units, the desktop
+packages, `dpkg --audit`, `apt-get check`, the kernel on the boot partition
+against its expected hash, and the running system. Most "it booted but
+something is wrong" faults show up there first. It changes nothing.
+
+If the script is not on the box (the published v0.7-tty image predates
+it), copy `scripts/smoke-test.sh` from the repository to `/root` first.
+
 ---
 
 ## Boot reaches U-Boot but the kernel produces **no output at all**

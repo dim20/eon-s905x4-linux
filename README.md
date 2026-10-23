@@ -266,6 +266,25 @@ There are three ways back in, in increasing order of effort:
 3. **Unlocking the bootloader** — ADNL and fastboot. See
    [`docs/recovery.md`](docs/recovery.md).
 
+### Verifying the box after a change
+
+`scripts/smoke-test.sh` is installed into `/root` by the build. After a
+kernel or image change, run it on the box:
+
+```
+/root/smoke-test.sh
+```
+
+It checks the branding, the console arrangement, failed units, the absence
+of a desktop, `dpkg --audit`, `apt-get check`, the kernel and DTB on the
+boot partition against their expected hashes, and the running system. It
+is read-only. Exit status 0 means everything passed; `--quiet` prints only
+the failures.
+
+**The published v0.7-tty image predates this script**, so on that download
+the file is not there. Copy `scripts/smoke-test.sh` to `/root` on the box
+if you want it; every image built from this tree afterwards carries it.
+
 ---
 
 ## Layout
@@ -304,6 +323,7 @@ scripts/
   find-env.sh                     locate the U-Boot environment (read-only)
   prepare-stick.sh                make a stick a self-contained live system
   grow-stick.sh                   extend a stick's rootfs into leftover space
+  smoke-test.sh                   one command after every kernel or image change
   build-stick-image.sh            build the published .img.gz from a rootfs tree
   build-kernel-package.sh         build the kernel as an installable .deb
   check-image.sh                  check an image (and a kernel package) against the manifest
