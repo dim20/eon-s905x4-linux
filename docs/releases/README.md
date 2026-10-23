@@ -8,7 +8,8 @@ an **errata** file next to it — never by rewriting the note.
 | File | What it is |
 |---|---|
 | `v0.1-testbox.md` … `v0.6-desktop.md` | the published notes, in order |
-| `v0.7-tty.md` | the current TTY release, and what changed since v0.6 |
+| `v0.7-tty.md` | the TTY release, and what changed since v0.6 |
+| `v0.7.1-tty.md` | the current release: the fixes that did not make v0.7 |
 | `errata-v0.6.md` | what v0.6 got wrong, and what to do if you have it |
 | `errata-v0.7.md` | corrections and addenda for v0.7-tty |
 

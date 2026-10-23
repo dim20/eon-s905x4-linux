@@ -204,7 +204,7 @@ d	755	0:0	-	-	etc/gss
 d	755	0:0	-	-	etc/gss/mech.d
 f	644	0:0	9	-	etc/host.conf
 f	644	0:0	8	-	etc/hostname
-f	644	0:0	227	-	etc/hosts
+f	644	0:0	245	-	etc/hosts
 f	644	0:0	411	-	etc/hosts.allow
 f	644	0:0	711	-	etc/hosts.deny
 d	755	0:0	-	-	etc/ifplugd
@@ -783,6 +783,7 @@ l	777	0:0	-	/usr/lib/systemd/system/systemd-networkd.service	etc/systemd/system/
 l	777	0:0	-	/usr/lib/systemd/system/systemd-resolved.service	etc/systemd/system/dbus-org.freedesktop.resolve1.service
 l	777	0:0	-	/usr/lib/systemd/system/systemd-timesyncd.service	etc/systemd/system/dbus-org.freedesktop.timesync1.service
 f	644	0:0	1484	-	etc/systemd/system/enable-hdmi.service
+f	644	0:0	1036	-	etc/systemd/system/eon-hdmi-audio.service
 f	644	0:0	773	-	etc/systemd/system/fontconfig-cache.service
 d	755	0:0	-	-	etc/systemd/system/getty.target.wants
 l	777	0:0	-	/usr/lib/systemd/system/getty@.service	etc/systemd/system/getty.target.wants/getty@tty1.service
@@ -793,6 +794,7 @@ l	777	0:0	-	/usr/lib/systemd/system/chrony.service	etc/systemd/system/multi-user
 l	777	0:0	-	/usr/lib/systemd/system/console-setup.service	etc/systemd/system/multi-user.target.wants/console-setup.service
 l	777	0:0	-	/usr/lib/systemd/system/e2scrub_reap.service	etc/systemd/system/multi-user.target.wants/e2scrub_reap.service
 l	777	0:0	-	/etc/systemd/system/enable-hdmi.service	etc/systemd/system/multi-user.target.wants/enable-hdmi.service
+l	777	0:0	-	/etc/systemd/system/eon-hdmi-audio.service	etc/systemd/system/multi-user.target.wants/eon-hdmi-audio.service
 l	777	0:0	-	/etc/systemd/system/fontconfig-cache.service	etc/systemd/system/multi-user.target.wants/fontconfig-cache.service
 l	777	0:0	-	/usr/lib/systemd/system/remote-fs.target	etc/systemd/system/multi-user.target.wants/remote-fs.target
 l	777	0:0	-	/usr/lib/systemd/system/rng-tools-debian.service	etc/systemd/system/multi-user.target.wants/rng-tools-debian.service
@@ -912,6 +914,7 @@ f	755	0:0	6733	-	root/grow-stick.sh
 f	755	0:0	25953	-	root/install-to-emmc.sh
 f	755	0:0	6792	-	root/prepare-stick.sh
 f	755	0:0	8204	-	root/rescue-init.sh
+f	755	0:0	11175	-	root/smoke-test.sh
 d	755	0:0	-	-	run
 d	755	0:0	-	-	run/sshd
 l	777	0:0	-	usr/sbin	sbin

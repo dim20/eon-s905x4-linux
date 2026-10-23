@@ -18,8 +18,8 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 
 | | |
 |---|---|
-| **Latest release** | **v0.7-tty** — the text console on HDMI and on serial; 0 failed units |
-| **Previous TTY release** | **v0.5.1** — the first working text console |
+| **Latest release** | **v0.7.1-tty** — the text console on HDMI and on serial; HDMI audio, the clock fallback, the hostname fix and the smoke test |
+| **Previous TTY release** | **v0.7-tty** — the text console as a product |
 | **The "desktop" release** | **v0.6-desktop** — named for a desktop its asset does not contain. See [`docs/releases/errata-v0.6.md`](docs/releases/errata-v0.6.md) |
 | **Next** | **P1** — a solid base: audio, power, thermal, storage, smoke test |
 
@@ -63,7 +63,7 @@ In **v0.7-tty**:
 
 ## Quick start
 
-Download the TTY image (**v0.7-tty**, `v0.7-tty-img.gz`; the same bytes
+Download the TTY image (**v0.7.1-tty**, `v0.7.1-tty-img.gz`; the same bytes
 are also published as `eon-s905x4-linux-stick.img.gz`) and write it to a
 USB stick of 1 GB or more:
 
