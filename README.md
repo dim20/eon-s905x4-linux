@@ -43,7 +43,7 @@ Verified on the development box for v0.5.1:
 | U-Boot recovery window | ✅ `bootdelay=3` — a "hit any key" prompt, when no stick is attached |
 | Root filesystem size | ✅ 15 GB on the eMMC, not the 744 MB it started with |
 | Audio | ❌ never confirmed audible |
-| USB keyboard on the HDMI console | ⏳ being verified for v0.7 |
+| USB keyboard on the HDMI console | ✅ login and `Ctrl-Alt-F1`…`F6` switching confirmed on the box |
 | WiFi | ❌ no open driver for the RTL8812CS |
 
 In the repository, but **not yet in a published image** (they land in
@@ -80,9 +80,9 @@ ssh root@<the address the box prints on the console>
 
 **There is also a login prompt on the HDMI output.** Plug in a display
 and a USB keyboard and the box gives you a text terminal — no SSH, no
-serial cable needed. The *output* is confirmed on a real display; USB
-keyboard *input* on that console is the one part still being verified for
-v0.7. If the keyboard does not respond, use SSH.
+serial cable needed. Both the output and the keyboard are confirmed on a
+real display, including `Ctrl-Alt-F1`…`F6` switching between virtual
+terminals.
 
 From there, provision the eMMC:
 
