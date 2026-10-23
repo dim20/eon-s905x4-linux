@@ -41,8 +41,12 @@ P2_START=180224
 # rebuilt the kernel; set VERIFY_SKIP=1 to bypass (not recommended).
 #
 # These are the hashes of the kernel and DTB that kernel/SHA256SUMS lists,
-# so the installer and the release agree about what is in the image.
-EXPECT_IMAGE=${EXPECT_IMAGE:-93420f6a5f2bc6c6ade51a793c8c8ffd77562827e51bc1255538f7aee0ada8ff}
+# so the installer and the release agree about what is in the image. The
+# kernel default is the CURRENT kernel; when the kernel changes, update it
+# here or pass EXPECT_IMAGE=... to the script. It used to default to the
+# v0.5.x kernel (93420f6a...), which is not what the repository ships, so
+# the installer refused to install the kernel it was meant to install.
+EXPECT_IMAGE=${EXPECT_IMAGE:-45a677435e2af01c5c77dd60692f60ce9482eaa51725fd983717e552d873c0d0}
 EXPECT_DTB=${EXPECT_DTB:-d1e2267f5e945acff73f7a8973af9fcbb2d777faf26771e2a7e75687537ffda8}
 KERNEL_NAME=${KERNEL_NAME:-Image}
 DTB_NAME=${DTB_NAME:-sc2_s905x4_ah212_linux.dtb}
@@ -265,10 +269,18 @@ mkfs.ext4 -F -q -L ROOTFS "$P2"
 # kind of read and write a normal file copy does, and it works with the
 # source mounted.
 #
-# Two things are deliberately left out, because the IMAGE does not have them
-# and every box must have its own:
+# Three things are deliberately left out, because the IMAGE does not have
+# them and every box must have its own:
 #   /etc/machine-id        - the machine identity; systemd generates one
 #   /etc/ssh/ssh_host_*    - the SSH host keys; sshd generates them
+#   /etc/ssh/ssh_host_keys_ready
+#                          - the vendor's "keys already generated" marker.
+#                            It must go too: ssh.service's ExecCondition is
+#                            check_and_generate_keys, which skips key
+#                            generation whenever the marker exists. Copy the
+#                            marker without the private keys and sshd starts
+#                            with no keys and fails. Excluding the whole
+#                            ssh_host_* set covers the marker as well.
 SRCROOT=/mnt/usb_root
 DSTROOT=/mnt/emmc_root
 
@@ -287,7 +299,7 @@ mount "$USB_ROOT" "$SRCROOT" || die "cannot mount $USB_ROOT"
 mount "$P2" "$DSTROOT" || die "cannot mount $P2"
 rsync -aH --numeric-ids --xattrs --acls --one-file-system \
       --exclude=/proc --exclude=/sys --exclude=/dev --exclude=/run --exclude=/tmp \
-      --exclude=/etc/machine-id --exclude='/etc/ssh/ssh_host_*_key' \
+      --exclude=/etc/machine-id --exclude='/etc/ssh/ssh_host_*' \
       "$SRCROOT/" "$DSTROOT/"
 rc=$?
 # These must not be allowed to abort the script: a umount that fails for a
