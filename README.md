@@ -304,6 +304,7 @@ docs/
   time.md                         the clock fallback, chrony and what to expect
   power.md                        reboot, poweroff and HDMI hotplug, with evidence
   network.md                      DHCP, static IP, DNS, mDNS, WiFi and Bluetooth
+  thermal.md                      a sustained-load run, temperatures and throttling
   troubleshooting.md              the traps, written down so you can avoid them
   lessons.md                      engineering lessons from this project
   licensing.md                    licences, credits, provenance

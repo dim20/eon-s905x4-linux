@@ -146,18 +146,44 @@ none on the test network.
 
 ## WiFi
 
-**There is no `wlan0`.** The kernel has the vendor's `aml_wifi` and
-`bcmdhd` (Broadcom) code built in, and the boot log shows it preallocating
-memory, but no wireless interface appears. The vendor's firmware/NVRAM is
-not shipped in this image.
+**There is no `wlan0`, and on this box that is not a driver problem — the
+SDIO bus never sees a card at all.**
+
+What the software says:
+
+- the board DTB enables `sdio@fe088000` (`status = "okay"`, 4-bit,
+  `non-removable`, SDR104) with a `wifi@1` child
+  (`compatible = "brcm,bcm4329-fmac"`);
+- `aml_wifi` binds and drives its `power_on-gpios` (GPIOX_6) **high** —
+  visible as `gpio-481 (GPIOX_6 |sdio_wifi) out hi`;
+- the SDIO pins are correctly muxed (`GPIOX_0..5` → `fe088000.sdio`);
+- `bcmdhd_init_wlan_mem` preallocates 8 MB.
+
+What the hardware says:
+
+- `/sys/bus/sdio/devices/` is **empty**; there is no `mmc1:0001` and no
+  `mmc1: new ...` card line in `dmesg`;
+- `mmc1` sits at the 400 kHz identification clock with power on — the
+  controller tried to enumerate a card and got no answer;
+- rebinding the SDIO host (forcing a rescan) changes nothing;
+- **pulsing the power line** (unbind `aml_wifi`, drive GPIOX_6 low then
+  high, rescan) still finds **no card**.
+
+So the SoC side is ready and the chip does not answer. The remaining
+explanations are on the module side: **the WiFi module is most likely not
+populated on this variant** (the same boot also loses the I²C LED
+controllers at `0x60` and `0x5b`), or it is wired to different pins /
+needs a reset sequence the DTB does not describe.
 
 `/etc/systemd/network/20-wlan0.network` is present and does DHCP with
-`RouteMetric=4096`, so Ethernet is preferred whenever both are up. If you
-supply a working vendor driver and firmware and `wlan0` appears, that file
-applies without further changes.
+`RouteMetric=4096`, so Ethernet wins whenever both are up. If a variant
+with a working card ever appears, that file applies with no change. The
+vendor's out-of-tree drivers (`drivers/xtra`: MT7668 and several Realtek
+parts) are built for the vendor's 6.18.55 kernel and cannot be loaded into
+ours; see the vendor-leftovers inventory.
 
-WiFi is therefore **a user-supplied driver problem**, not a configuration
-one. Do not expect the image to bring up wireless on its own.
+**Do not expect this image to bring up wireless.** On this box there is
+nothing to bring up.
 
 ## Bluetooth
 
@@ -188,5 +214,7 @@ trust. See the README's security note.
 - mDNS off; the global + per-link recipe was applied and reverted, and
   `eth0` showed `+mDNS` while it was on; no second mDNS peer for an
   end-to-end lookup;
-- no `wlan0`; vendor firmware not shipped;
-- Bluetooth unverified.
+- no `wlan0`: the SDIO bus finds **no card**, even after a host rebind and
+  a power pulse on GPIOX_6; the DTB, power GPIO and pinmux are all in
+  place, so the module is most likely not populated on this variant;
+- Bluetooth unverified (no `/sys/class/bluetooth` device).
