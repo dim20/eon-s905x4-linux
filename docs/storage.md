@@ -112,9 +112,13 @@ reboots, make the journal volatile — but do it knowing what you lose.
 
 ## Free space
 
-At the time of writing the eMMC root filesystem is **809 MiB used of
-15 GiB, 13 GiB free**. The stick's p2 starts at 800 MiB and grows to fill
-whatever stick it is written to.
+At the time of writing the eMMC root filesystem is **749 MiB used of
+15 GiB, 13 GiB free**. That is after purging the vendor's kernel package
+(85 MB of loadable modules for a kernel the box never boots) on
+2026-10-23; it was 809 MiB before. The stick's p2 starts at 800 MiB and
+grows to fill whatever stick it is written to. The published image still
+carries the vendor's modules — see
+[`../manifest/vendor-leftovers.txt`](../manifest/vendor-leftovers.txt).
 
 The ext4 reserved-block count is the default 5% (190,092 blocks of
 3,801,856). That is ~760 MiB held back for root's use on this filesystem.
@@ -144,6 +148,8 @@ removed:
   produce a failed unit;
 - `discard_granularity` and `discard_max_bytes` are both 0;
 - `life_time` `0x01 0x00`, `pre_eol_info` `0x01` — healthy, 0–10% used;
-- 809 MiB used of 15 GiB, 13 GiB free;
+- 749 MiB used of 15 GiB, 13 GiB free, after purging the vendor's kernel
+  package (`linux-image-6.18.55-meson64`, 85 MB) on 2026-10-23 — 809 MiB
+  before;
 - root mounted `defaults,noatime`, no `discard`;
 - `/var/log/journal` exists (persistent journal).

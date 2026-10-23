@@ -40,6 +40,25 @@ plan/PLAN-OF-RECORD.md. When it is done, the rule goes into
 manifest/forbidden-paths.txt as `/usr/lib/modules/*` — with the leading
 /usr, because a rule without it matches nothing.
 
+**Purged on the eMMC, 2026-10-23.** The package turned out to be safe to
+remove with dpkg: `prerm.d` is empty, the only `postrm.d` hook
+(`initramfs-tools`) exits immediately because `INITRD=No`, and nothing
+depends on it. `dpkg --purge linux-image-6.18.55-meson64` succeeded:
+`/usr/lib/modules` is gone, `dpkg --audit` is clean, `apt-get check`
+passes, 0 failed units. The running kernel is unaffected — it is our
+5.4.210, on p1.
+
+**What that means for the released image.** The `.img.gz` still carries the
+85 MB, because the image is built on an x86_64 host with no dpkg and no
+ARM64 chroot, so it cannot purge an ARM64 dpkg database. Only an installed
+system can be cleaned this way. To clean an installed box:
+
+    dpkg --purge linux-image-6.18.55-meson64
+
+The image-level fix remains the package-list rootfs (mmdebstrap). Until
+then, the 85 MB is dead weight in the stick and in a fresh install — but
+not in the box this was purged on.
+
 ## The vendor's branding — `qubian-distro`, `toilet`, `toilet-fonts`
 
 **What they are.** The vendor replaced Debian's own distribution package
