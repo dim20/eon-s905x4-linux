@@ -302,6 +302,7 @@ docs/
   framebuffer.md                  how the display really works, and the tools that show it
   storage.md                      partitions, TRIM, eMMC wear and free space
   time.md                         the clock fallback, chrony and what to expect
+  power.md                        reboot, poweroff and HDMI hotplug, with evidence
   troubleshooting.md              the traps, written down so you can avoid them
   lessons.md                      engineering lessons from this project
   licensing.md                    licences, credits, provenance

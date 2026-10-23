@@ -22,6 +22,7 @@ general-purpose Linux computer. It is not a media centre.
 | understand the display path | [`framebuffer.md`](framebuffer.md) |
 | understand storage, TRIM and eMMC wear | [`storage.md`](storage.md) |
 | understand timekeeping and the clock fallback | [`time.md`](time.md) |
+| understand power, reboots and HDMI hotplug | [`power.md`](power.md) |
 | avoid a trap we already hit | [`troubleshooting.md`](troubleshooting.md), [`lessons.md`](lessons.md) |
 | know the licensing | [`licensing.md`](licensing.md) |
 
