@@ -264,6 +264,23 @@ if [ -e "$ROOTFS_TREE/etc/machine-id" ]; then
     log "  removed the machine-id — systemd will generate a unique one per box"
 fi
 
+# ---------------------------------------------------------------- clock fallback
+# The box has no battery-backed RTC. The vendor's meson-vrtc starts at epoch 2,
+# and fake-hwclock-load.service then restores the time saved in this file. If
+# the file carries the SOURCE TREE's timestamp, a cold boot without network
+# starts whenever the tree was last touched — the v0.7 stick started 19 days
+# in the past for exactly that reason.
+#
+# The contents are derived from SOURCE_DATE_EPOCH, not from "now", so the
+# image stays reproducible: the same tree gives the same bytes. The installer
+# refreshes the file to the install time on the eMMC, and the fake-hwclock-save
+# timer keeps it current afterwards.
+if [ -e "$ROOTFS_TREE/etc/fake-hwclock.data" ]; then
+    date -u -d "@$SOURCE_DATE_EPOCH" '+%Y-%m-%d %H:%M:%S' \
+        > "$ROOTFS_TREE/etc/fake-hwclock.data"
+    log "  clock fallback set to $(cat "$ROOTFS_TREE/etc/fake-hwclock.data") UTC"
+fi
+
 # ---------------------------------------------------------------- no desktop
 # The image ships NO desktop. A desktop is 450 MB of packages and a display
 # manager that grabs the framebuffer console, and the whole point of this

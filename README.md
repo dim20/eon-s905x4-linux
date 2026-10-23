@@ -301,6 +301,7 @@ docs/
   kernel-package.md               the kernel as an installable package, and rollback
   framebuffer.md                  how the display really works, and the tools that show it
   storage.md                      partitions, TRIM, eMMC wear and free space
+  time.md                         the clock fallback, chrony and what to expect
   troubleshooting.md              the traps, written down so you can avoid them
   lessons.md                      engineering lessons from this project
   licensing.md                    licences, credits, provenance
