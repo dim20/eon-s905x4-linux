@@ -121,13 +121,28 @@ To turn mDNS on:
 mkdir -p /etc/systemd/resolved.conf.d
 printf '[Resolve]\nMulticastDNS=yes\n' > /etc/systemd/resolved.conf.d/10-mdns.conf
 systemctl restart systemd-resolved
-resolvectl mdns          # should say yes
+resolvectl mdns                 # Global: yes
+resolvectl mdns eth0 yes        # the link can still report "no"
+resolvectl mdns eth0            # Link 3 (eth0): yes
+```
+
+The per-link step is not cosmetic: after the global change, `eth0` still
+reported `no` until it was set on the link. To make that survive a
+restart, add the same setting to the network file:
+
+```ini
+# /etc/systemd/network/10-eth0.network
+[Link]
+MulticastDNS=yes
 ```
 
 Avahi is **not installed**; this is resolved's built-in mDNS, enough for
-`hostname.local` lookups between machines that implement it. It was not
-tested end-to-end here because there is no second mDNS peer on the test
-network.
+`hostname.local` lookups between machines that implement it.
+
+**Tested:** the global and per-link settings changed as above, and
+`resolvectl status eth0` showed `+mDNS` while they were on. **Not
+tested:** an actual name resolution against a second mDNS peer — there is
+none on the test network.
 
 ## WiFi
 
@@ -170,6 +185,8 @@ trust. See the README's security note.
   eon-sc2` → `127.0.1.1`;
 - static-address mechanism tested on `dummy0` (address applied, ping
   worked, eth0 unaffected); the exact eth0 change not applied live;
-- mDNS off; recipe given; no second mDNS peer to test against;
+- mDNS off; the global + per-link recipe was applied and reverted, and
+  `eth0` showed `+mDNS` while it was on; no second mDNS peer for an
+  end-to-end lookup;
 - no `wlan0`; vendor firmware not shipped;
 - Bluetooth unverified.
