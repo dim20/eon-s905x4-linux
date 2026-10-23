@@ -23,6 +23,7 @@ general-purpose Linux computer. It is not a media centre.
 | understand storage, TRIM and eMMC wear | [`storage.md`](storage.md) |
 | understand timekeeping and the clock fallback | [`time.md`](time.md) |
 | understand power, reboots and HDMI hotplug | [`power.md`](power.md) |
+| understand networking, static IP, mDNS and WiFi | [`network.md`](network.md) |
 | avoid a trap we already hit | [`troubleshooting.md`](troubleshooting.md), [`lessons.md`](lessons.md) |
 | know the licensing | [`licensing.md`](licensing.md) |
 

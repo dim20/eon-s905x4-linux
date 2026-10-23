@@ -269,6 +269,12 @@ else
     fail "the root filesystem is read-only"
 fi
 
+if getent hosts "$(hostname)" >/dev/null 2>&1; then
+    ok "the hostname resolves locally"
+else
+    fail "the hostname does not resolve locally (getent hosts $(hostname))"
+fi
+
 if [ -e /dev/fb0 ]; then
     ok "/dev/fb0 exists"
 else

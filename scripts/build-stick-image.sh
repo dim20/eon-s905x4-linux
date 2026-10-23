@@ -549,6 +549,21 @@ proc        /proc   proc  defaults                 0  0
 tmpfs       /tmp    tmpfs defaults,nosuid,nodev    0  0
 EOF
 
+# ---------------------------------------------------------------- /etc/hosts
+# The box's own name must resolve locally. Debian normally puts
+# "127.0.1.1 <hostname>" in /etc/hosts; the vendor image has
+# "127.0.0.1 tvbox" instead, so `hostname -f` and `getent hosts eon-sc2`
+# fail. That breaks anything that wants the local FQDN, and it is cheap to
+# fix here rather than on every box.
+HOSTNAME=$(cat "$ROOTFS_TREE/etc/hostname" 2>/dev/null | tr -d '[:space:]')
+if [ -n "$HOSTNAME" ]; then
+    if ! grep -qE "^127\.0\.1\.1[[:space:]]+${HOSTNAME}([[:space:]]|$)" \
+            "$ROOTFS_TREE/etc/hosts" 2>/dev/null; then
+        printf '127.0.1.1\t%s\n' "$HOSTNAME" >> "$ROOTFS_TREE/etc/hosts"
+        log "  mapped $HOSTNAME to 127.0.1.1 in /etc/hosts"
+    fi
+fi
+
 # ------------------------------------------------- the units we enable
 # The build cannot run systemctl, so the wants-symlinks are made here.
 #
