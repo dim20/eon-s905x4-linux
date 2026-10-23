@@ -55,12 +55,17 @@ When two sources disagree, the higher one wins.
   at about 12–18 s (`fbcon: Taking over console`, then
   `Console: switching to colour frame buffer device 240x67`), because no
   display manager is running.
-- The **desktop is frozen**. v0.6-desktop shipped one, and its text was
-  unreadable. See [`releases/errata-v0.6.md`](releases/errata-v0.6.md).
-  There is no desktop work until v0.7-tty is published.
-- The latest **TTY** release is **v0.5.1**. The next release is
-  **v0.7-tty**; until it exists, `README.md` describes v0.5.1's features
-  and names the differences.
+- The **latest release is v0.7-tty** (2026-10-23), the text-console
+  product. See [`../README.md`](../README.md) and
+  [`releases/v0.7-tty.md`](releases/v0.7-tty.md).
+- The **image file has been exercised end-to-end**: written to a stick,
+  verified with `cmp`, booted on the box; the root filesystem stayed
+  ~800 MiB and p1 carried `Image`, the DTB and `aml_autoscript`. See
+  [`releases/errata-v0.7.md`](releases/errata-v0.7.md) Addendum 1.
+- The **desktop is frozen** and returns as an optional package set. The
+  v0.6 asset was *named* for a desktop it does not contain; its terminal
+  text was unreadable in the box's own desktop install. See
+  [`releases/errata-v0.6.md`](releases/errata-v0.6.md).
 - The box has **no loadable modules**: the kernel is monolithic, which is
   why the vendor's module tree is dead weight (see
   [`../manifest/vendor-leftovers.txt`](../manifest/vendor-leftovers.txt)).
