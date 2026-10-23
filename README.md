@@ -18,12 +18,13 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 
 | | |
 |---|---|
-| **Latest TTY release** | **v0.5.1** — the text console on HDMI works; 0 failed units |
-| **Latest desktop release** | **v0.6-desktop** — not recommended: its terminal text is unreadable. See [`docs/releases/errata-v0.6.md`](docs/releases/errata-v0.6.md) |
-| **Next** | **v0.7-tty** — folds in the work below that is not in a published image yet |
+| **Latest release** | **v0.7-tty** — the text console on HDMI and on serial; 0 failed units |
+| **Previous TTY release** | **v0.5.1** — the first working text console |
+| **The "desktop" release** | **v0.6-desktop** — named for a desktop its asset does not contain. See [`docs/releases/errata-v0.6.md`](docs/releases/errata-v0.6.md) |
+| **Next** | **P1** — a solid base: audio, power, thermal, storage, smoke test |
 
-The desktop is **frozen** until v0.7-tty is published. It comes back as an
-optional package set, not as a second image.
+The desktop is **frozen** and returns as an optional package set, not as a
+second image.
 
 Verified on the development box for v0.5.1:
 
@@ -46,8 +47,7 @@ Verified on the development box for v0.5.1:
 | USB keyboard on the HDMI console | ✅ login and `Ctrl-Alt-F1`…`F6` switching confirmed on the box |
 | WiFi | ❌ no open driver for the RTL8812CS |
 
-In the repository, but **not yet in a published image** (they land in
-v0.7-tty):
+In **v0.7-tty**:
 
 - the framebuffer fixes (`fix.smem_start`, the buffer's lifetime);
 - the kernel as an installable package, labelled `5.4.210-eon3`, with
@@ -63,8 +63,9 @@ v0.7-tty):
 
 ## Quick start
 
-Download the TTY image (`eon-s905x4-linux-stick.img.gz` from **v0.5.1**,
-until v0.7-tty is published) and write it to a USB stick of 1 GB or more:
+Download the TTY image (**v0.7-tty**, `v0.7-tty-img.gz`; the same bytes
+are also published as `eon-s905x4-linux-stick.img.gz`) and write it to a
+USB stick of 1 GB or more:
 
 ```sh
 gunzip -c eon-s905x4-linux-stick.img.gz | sudo dd of=/dev/sdX bs=4M status=progress
@@ -99,10 +100,10 @@ live system, run `scripts/grow-stick.sh` against it first.
 
 ### The login banner
 
-The release you download today (v0.5.1) still shows the vendor's login
-art. The repository replaces it with our own banner, and the change lands
-in v0.7-tty. It is plain ASCII on purpose: the framebuffer console does
-not interpret terminal escape sequences.
+v0.7-tty shows our banner, not the vendor's: `/etc/issue`, `/etc/issue.net`
+and the login-message hooks are replaced during the build. It is plain
+ASCII on purpose: the framebuffer console does not interpret terminal
+escape sequences.
 
 ## Known gaps
 
@@ -156,11 +157,12 @@ These are real and will bite you:
    [`docs/recovery.md`](docs/recovery.md) — you will need a UART console
    once.
 9. **Opening `/dev/fb0` panics the box — on v0.5.1, v0.6, and any image
-   built before v0.7.** The text console itself is fine, and it draws all
-   day. But any program that opens `/dev/fb0` — `fbset`, a framebuffer
-   tool, an X server — closes it again, and the kernel panics a few
-   seconds later: the framebuffer console's cursor puts the mapping back
-   down and the next blink writes through a NULL screen base.
+   built before v0.7.** v0.7-tty fixes it. The text console itself is
+   fine, and it draws all day. But any program that opens `/dev/fb0` —
+   `fbset`, a framebuffer tool, an X server — closes it again, and on
+   those older images the kernel panics a few seconds later: the
+   framebuffer console's cursor puts the mapping back down and the next
+   blink writes through a NULL screen base.
 
    ```
    fb_flashcursor -> bit_cursor -> soft_cursor ->
@@ -169,8 +171,8 @@ These are real and will bite you:
    ```
 
    Reproduced on 2026-10-23 on the test box, with the serial console
-   capturing the panic. **Until you are running v0.7-tty, do not open
-   `/dev/fb0` on a released image.** The fix is in the v0.7 kernel; see
+   capturing the panic. **On an image older than v0.7-tty, do not open
+   `/dev/fb0`.** The fix is in the v0.7 kernel; see
    [`docs/framebuffer.md`](docs/framebuffer.md) for the mechanism.
 
 If you want to help finish it, see the roadmap below.
@@ -371,10 +373,10 @@ The phases are the plan of record's, not a new numbering:
 
 | | Phase | State |
 |---|---|---|
-| H | documentation and housekeeping | **H1–H8 done** (2026-10-23); H9 fresh-eyes review is next |
-| P0 | **v0.7-tty**: finish the base and release it | next; blocks everything else |
-| P1 | a solid base: audio, power, thermal, storage, smoke test | planned |
-| P2 | desktop, splash, and the boot experience | **frozen until v0.7 ships** |
+| H | documentation and housekeeping | **done** (2026-10-23), including the fresh-eyes review |
+| P0 | **v0.7-tty**: finish the base and release it | **done** — this release |
+| P1 | a solid base: audio, power, thermal, storage, smoke test | **next** |
+| P2 | desktop, splash, and the boot experience | **frozen** |
 | P3 | hardware: a second box, then other devices | planned |
 
 The detailed plan, including what "done" means for each item, is

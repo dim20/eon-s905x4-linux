@@ -42,8 +42,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-[ -n "$ROOTFS" ] || { echo "usage: $0 --rootfs <dir> [--p1 <image>] [--package <deb>]" >&2; exit 2; }
-[ -d "$ROOTFS" ] || { echo "not a directory: $ROOTFS" >&2; exit 2; }
+[ -n "$ROOTFS" ] || [ -n "$PACKAGE" ] || { echo "usage: $0 --rootfs <dir> [--p1 <image>] [--package <deb>]" >&2; exit 2; }
+[ -z "$ROOTFS" ] || [ -d "$ROOTFS" ] || { echo "not a directory: $ROOTFS" >&2; exit 2; }
 [ -d "$MANIFEST" ] || { echo "no manifest directory: $MANIFEST" >&2; exit 2; }
 
 FAILS=0
@@ -435,19 +435,29 @@ manifest_value() {
 }
 
 # ---------------------------------------------------------------- run
+# The rootfs checks need a rootfs. The package checks do not: they read
+# the .deb. So a call with only --package checks the package and nothing
+# else, which is what a release needs when the image has already been
+# checked against the tree it was built from.
 if [ "$QUIET" = 0 ]; then
-    echo "[check-image] checking $ROOTFS against $MANIFEST"
+    if [ -n "$ROOTFS" ]; then
+        echo "[check-image] checking $ROOTFS against $MANIFEST"
+    else
+        echo "[check-image] checking the package against $MANIFEST"
+    fi
 fi
 
-[ -f "$MANIFEST/required-packages.txt" ] && check_packages "$MANIFEST/required-packages.txt" required
-[ -f "$MANIFEST/forbidden-packages.txt" ] && check_packages "$MANIFEST/forbidden-packages.txt" forbidden
-check_required_paths
-check_forbidden_paths
-[ -f "$MANIFEST/forbidden-strings.txt" ] && check_forbidden_strings
-[ -f "$MANIFEST/required-units.txt" ] && check_units
-[ -f "$MANIFEST/forbidden-units.txt" ] && check_forbidden_units
-[ -f "$MANIFEST/masked-units.txt" ] && check_masked_units
-[ -f "$MANIFEST/global.txt" ] && check_global
+if [ -n "$ROOTFS" ]; then
+    [ -f "$MANIFEST/required-packages.txt" ] && check_packages "$MANIFEST/required-packages.txt" required
+    [ -f "$MANIFEST/forbidden-packages.txt" ] && check_packages "$MANIFEST/forbidden-packages.txt" forbidden
+    check_required_paths
+    check_forbidden_paths
+    [ -f "$MANIFEST/forbidden-strings.txt" ] && check_forbidden_strings
+    [ -f "$MANIFEST/required-units.txt" ] && check_units
+    [ -f "$MANIFEST/forbidden-units.txt" ] && check_forbidden_units
+    [ -f "$MANIFEST/masked-units.txt" ] && check_masked_units
+    [ -f "$MANIFEST/global.txt" ] && check_global
+fi
 check_p1
 check_package
 

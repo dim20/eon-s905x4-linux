@@ -191,6 +191,7 @@ d	755	0:0	-	-	etc/emacs
 d	755	0:0	-	-	etc/emacs/site-start.d
 f	644	0:0	290	-	etc/emacs/site-start.d/50figlet.el
 f	644	0:0	0	-	etc/environment
+f	644	0:0	862	-	etc/eon-release
 f	644	0:0	1936	-	etc/ethertypes
 f	644	0:0	20	-	etc/fake-hwclock.data
 f	644	0:0	355	-	etc/fstab
@@ -243,8 +244,8 @@ d	755	0:0	-	-	etc/initramfs-tools/scripts/nfs-top
 d	755	0:0	-	-	etc/initramfs-tools/scripts/panic
 f	644	0:0	378	-	etc/initramfs-tools/update-initramfs.conf
 f	644	0:0	1875	-	etc/inputrc
-l	777	0:0	-	/usr/lib/qubian/issue	etc/issue
-l	777	0:0	-	/usr/lib/qubian/issue.net	etc/issue.net
+f	644	0:0	313	-	etc/issue
+f	644	0:0	209	-	etc/issue.net
 d	755	0:0	-	-	etc/kernel
 d	755	0:0	-	-	etc/kernel/install.d
 d	755	0:0	-	-	etc/kernel/postinst.d
@@ -781,7 +782,7 @@ l	777	0:0	-	/usr/lib/systemd/system/bluetooth.service	etc/systemd/system/dbus-or
 l	777	0:0	-	/usr/lib/systemd/system/systemd-networkd.service	etc/systemd/system/dbus-org.freedesktop.network1.service
 l	777	0:0	-	/usr/lib/systemd/system/systemd-resolved.service	etc/systemd/system/dbus-org.freedesktop.resolve1.service
 l	777	0:0	-	/usr/lib/systemd/system/systemd-timesyncd.service	etc/systemd/system/dbus-org.freedesktop.timesync1.service
-f	644	0:0	1054	-	etc/systemd/system/enable-hdmi.service
+f	644	0:0	1484	-	etc/systemd/system/enable-hdmi.service
 f	644	0:0	773	-	etc/systemd/system/fontconfig-cache.service
 d	755	0:0	-	-	etc/systemd/system/getty.target.wants
 l	777	0:0	-	/usr/lib/systemd/system/getty@.service	etc/systemd/system/getty.target.wants/getty@tty1.service
@@ -870,7 +871,9 @@ d	755	0:0	-	-	etc/ufw
 d	755	0:0	-	-	etc/ufw/applications.d
 f	644	0:0	145	-	etc/ufw/applications.d/openssh-server
 d	755	0:0	-	-	etc/update-motd.d
+f	755	0:0	1100	-	etc/update-motd.d/01-eon-header
 f	755	0:0	1050	-	etc/update-motd.d/01-quban-header
+f	755	0:0	1342	-	etc/update-motd.d/15-eon-system-state
 f	755	0:0	1096	-	etc/update-motd.d/15-qubian-system-state
 l	777	0:0	-	default/keyboard	etc/vconsole.conf
 d	755	0:0	-	-	etc/wpa_supplicant
@@ -903,10 +906,10 @@ d	755	0:0	-	-	mnt/usb_boot
 d	755	0:0	-	-	opt
 d	755	0:0	-	-	proc
 d	700	0:0	-	-	root
-f	755	0:0	2760	-	root/enable-hdmi.sh
+f	755	0:0	3979	-	root/enable-hdmi.sh
 f	755	0:0	3664	-	root/find-env.sh
-f	755	0:0	5891	-	root/grow-stick.sh
-f	755	0:0	25106	-	root/install-to-emmc.sh
+f	755	0:0	6733	-	root/grow-stick.sh
+f	755	0:0	25953	-	root/install-to-emmc.sh
 f	755	0:0	6792	-	root/prepare-stick.sh
 f	755	0:0	8204	-	root/rescue-init.sh
 d	755	0:0	-	-	run

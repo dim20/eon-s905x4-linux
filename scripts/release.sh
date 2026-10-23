@@ -55,25 +55,35 @@ echo "=== 1. building the image ==========================================="
 echo
 echo "=== 2. the record ==================================================="
 # The inventory is the answer to "which files must remain in the image",
-# written out, file by file. The baseline in the repo is what the NEXT
-# build is compared against.
-if [ -f "$REPO/manifest/inventory.txt" ]; then
-    "$HERE/inventory.sh" --rootfs "$TREE" --diff "$REPO/manifest/inventory.txt" || true
+# written out, file by file. The build writes it for the tree it actually
+# composed into the image - its own staged copy, with the overrides applied
+# - and prints the difference against the baseline as it goes.
+#
+# Recomputing it here from $TREE would describe the SOURCE tree instead,
+# which is a different set of files: the build removes the vendor's
+# leftovers and installs ours on its staged copy. The baseline in the repo
+# is what the NEXT build is compared against, so the IMAGE's inventory is
+# what belongs there, not the input's.
+if [ -f "$DIST/inventory.txt" ]; then
+    cp "$DIST/inventory.txt" "$REPO/manifest/inventory.txt"
+    echo "[release] the baseline inventory is now manifest/inventory.txt"
 else
-    echo "[release] no baseline inventory yet - this is the first record"
+    echo "[release] WARNING: the build wrote no inventory; the baseline is unchanged" >&2
 fi
-cp "$DIST/inventory.txt" "$REPO/manifest/inventory.txt"
-echo "[release] the baseline inventory is now manifest/inventory.txt"
 
 # ---------------------------------------------------------------- 3. hashes
 echo
 echo "=== 3. the checksums ================================================"
 cp "$REPO/kernel/Image" "$DIST/Image"
 cp "$REPO/kernel/sc2_s905x4_ah212_linux.dtb" "$DIST/sc2_s905x4_ah212_linux.dtb"
+# The "current" asset name is what the README tells a user to download, and
+# it changes from release to release. Keep the release-named copy as well, so
+# a file can never be mistaken for a different release's.
+cp "$DIST/$NAME-img.gz" "$DIST/eon-s905x4-linux-stick.img.gz"
 {
     echo "# $NAME"
     echo "# verify with: sha256sum -c SHA256SUMS"
-    ( cd "$DIST" && sha256sum "$NAME-img.gz" Image sc2_s905x4_ah212_linux.dtb )
+    ( cd "$DIST" && sha256sum "$NAME-img.gz" eon-s905x4-linux-stick.img.gz Image sc2_s905x4_ah212_linux.dtb )
 } > "$DIST/SHA256SUMS"
 cat "$DIST/SHA256SUMS"
 
@@ -96,8 +106,13 @@ export SOURCE_DATE_EPOCH
 echo "[release] built $PKG"
 
 # The package has its own manifest, and it is checked against the
-# BUILT package - the same rule as the image.
-"$REPO/scripts/check-image.sh" --rootfs "$TREE" --package "$PKG" --quiet \
+# BUILT package - the same rule as the image. Only the package checks
+# run here: the image's own checks already ran during the build, against
+# the tree that was actually composed into it. Passing --rootfs here
+# would point those checks at the raw source tree, which has none of the
+# build's transformations (no overrides, no masked units), and every one
+# of them would fail.
+"$REPO/scripts/check-image.sh" --package "$PKG" --quiet \
     || { echo "[release] the kernel package FAILED the manifest - refusing to release" >&2; exit 1; }
 echo "[release] the kernel package passed the manifest"
 

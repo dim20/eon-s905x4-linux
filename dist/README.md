@@ -8,13 +8,15 @@ file:
 
 | File | What it actually is |
 |---|---|
-| `eon-s905x4-linux-stick.img.gz` | the **v0.6-desktop** image (`934d3969…`). This is the asset name `release.sh` writes for the *newest* release, so the file it names changes from release to release. It is **not** v0.5.1. |
-| `v0.6-desktop-img.gz` | the same bytes as `eon-s905x4-linux-stick.img.gz`, kept under a release-named copy so it cannot be mistaken for another release. |
-| `Image` | the v0.6-desktop kernel (`39b91fd0…`). |
-| `sc2_s905x4_ah212_linux.dtb` | the v0.6-desktop device tree (`d1e2267f…`). |
+| `eon-s905x4-linux-stick.img.gz` | the **v0.7-tty** image. This is the "current" asset name the README tells a user to download; the file it names changes from release to release. It is the same bytes as `v0.7-tty-img.gz`. |
+| `v0.7-tty-img.gz` | the same bytes as `eon-s905x4-linux-stick.img.gz`, kept under a release-named copy so it cannot be mistaken for another release. |
+| `v0.7-tty-kernel.deb` | the v0.7-tty kernel as an installable package, with rollback. |
+| `Image` | the v0.7-tty kernel (`45a67743…`). |
+| `sc2_s905x4_ah212_linux.dtb` | the v0.7-tty device tree (`d1e2267f…`). |
+| `v0.6-desktop-img.gz` | the **v0.6** image (`934d3969…`). Despite the name it contains no desktop — only `tasksel`. See [`../docs/releases/errata-v0.6.md`](../docs/releases/errata-v0.6.md) Correction 4. |
 | `v0.5-manifest-img.gz` | the **v0.5** image (`7c6147cb…`). It is not v0.5.1. |
-| `inventory.txt`, `TEST-CHECKLIST.md` | produced by the v0.6-desktop build. |
-| `SHA256SUMS` | covers the three v0.6-desktop assets above. Verify with `sha256sum -c SHA256SUMS` from this directory. |
+| `inventory.txt`, `TEST-CHECKLIST.md` | produced by the v0.7-tty build. |
+| `SHA256SUMS` | covers the v0.7-tty assets above. Verify with `sha256sum -c SHA256SUMS` from this directory. |
 
 ## What is missing, and why
 
@@ -27,8 +29,7 @@ file:
 
 ## Which one should I use?
 
-For the text console, **v0.5.1** — download it from the Releases page.
-`eon-s905x4-linux-stick.img.gz` here is v0.6-desktop, whose terminal text
-is unreadable: see [`../docs/releases/errata-v0.6.md`](../docs/releases/errata-v0.6.md).
-
-The next release, v0.7-tty, will be written under its own release name.
+For the text console, **v0.7-tty** — the current release. The two image
+files named above are the same bytes; either works. v0.6-desktop is an
+older asset whose terminal text is unreadable, and whose "desktop" is not
+in the file at all: see [`../docs/releases/errata-v0.6.md`](../docs/releases/errata-v0.6.md).
