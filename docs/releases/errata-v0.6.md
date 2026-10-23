@@ -64,7 +64,32 @@ the contradiction with earlier documents survived: the vblank interrupt is
 vblank *event*), and it is **not** what blocks the desktop. Anything that
 waits for a vblank will time out; the fbdev path does not wait for one.
 
+## Correction 4 — the published asset has no desktop in it
+
+**The v0.6 asset is a TTY tree, not a desktop one.** Its
+`var/lib/dpkg/status` lists 271 packages, including `tasksel`, and **none**
+of `xfce4`, `lightdm`, `xserver-xorg` or `xinit`; the package set is
+identical to the manifest tree that `scripts/build-stick-image.sh` builds
+today. The greeter the release notes describe came from the desktop that
+was installed on the **test box's eMMC**, which was provisioned separately
+— it was never in the image published under the v0.6 name.
+
+A smaller inconsistency sits in the same assets table: it gives the stick
+image as **234,357,024** bytes, but the published file is
+**234,350,366** bytes, even though its SHA256 *does* match the recorded
+`934d3969...`. Two files that differ cannot share a SHA256, so the size in
+the release notes is the error.
+
+**Consequence:** the remedy below is a no-op on the published asset —
+there is no display manager installed to mask, and the text console
+already comes up on its own. Anyone who saw a v0.6 desktop was looking at
+the box, not at this file.
+
 ## What to do if you have v0.6
+
+The published asset boots to a text console already (Correction 4); there
+is no display manager to mask. If you have a tree that *does* carry the
+desktop, mask it:
 
 - **If you want the text console:** mask the display manager and reboot.
 

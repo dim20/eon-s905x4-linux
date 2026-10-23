@@ -51,12 +51,28 @@
 #   pre-installed (chrony, curl, openssh-server, ca-certificates) and
 #   /root/rescue-init.sh, /root/install-to-emmc.sh, /root/find-env.sh and
 #   /root/prepare-stick.sh in place.
+#
+# CHECK MODE
+#   --check runs everything up to the point of composing the root
+#   filesystem: it stages the tree, applies the same transformations a
+#   build would, builds the boot partition, and checks the result against
+#   the manifest - then stops. It composes no p2 filesystem and writes no
+#   image, so it is the fast way to answer "is this tree buildable?" and
+#   the right thing for CI to run:
+#
+#       unshare -r scripts/build-stick-image.sh --check <tree>
 
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 REPO="$(cd "$HERE/.." && pwd)"
 
+# --check stops after the manifest check; see CHECK MODE above.
+CHECK=0
+if [ "${1:-}" = "--check" ]; then
+    CHECK=1
+    shift
+fi
 ROOTFS_TREE=${1:-}
 OUT=${2:-"$REPO/dist/eon-s905x4-linux-stick.img.gz"}
 
@@ -78,7 +94,7 @@ die()  { printf '[build-image] ERROR: %s\n' "$*" >&2; exit 1; }
 for t in mke2fs mkfs.vfat mcopy mdir debugfs sfdisk gzip; do
     command -v "$t" >/dev/null || die "$t not found"
 done
-[ -n "$ROOTFS_TREE" ] || die "usage: $0 <rootfs-tree> [output.img.gz]"
+[ -n "$ROOTFS_TREE" ] || die "usage: $0 [--check] <rootfs-tree> [output.img.gz]"
 [ -d "$ROOTFS_TREE" ] || die "$ROOTFS_TREE is not a directory"
 [ -f "$KERNEL" ] || die "kernel Image not found at $KERNEL"
 [ -f "$DTB" ] || die "DTB not found at $DTB"
@@ -365,7 +381,14 @@ if [ -d "$HERE/overrides" ]; then
             cp -a "$src/." "$dest/"
             log "  applied override: $name"
         else
-            # a whole unit file: e.g. enable-hdmi.service
+            # A whole unit file: e.g. enable-hdmi.service. Anything that is
+            # not named like a unit (a README, say) documents the overrides
+            # rather than being one, and must not be copied into
+            # /etc/systemd/system where systemd would read it.
+            case "$name" in
+                *.service|*.socket|*.target|*.timer|*.mount|*.path|*.swap) ;;
+                *) log "  skipped non-unit override: $name"; continue ;;
+            esac
             cp -a "$src" "$ROOTFS_TREE/etc/systemd/system/$name"
             log "  installed unit: $name"
         fi
@@ -571,6 +594,40 @@ for s in rescue-init.sh install-to-emmc.sh find-env.sh prepare-stick.sh grow-sti
     log "  installed $s"
 done
 
+# ---------------------------------------------------------------- sanity
+# Check the SOURCE before building anything from it. mke2fs -d does not
+# complain about an empty or truncated directory: it builds a filesystem
+# containing exactly what it was given, which may be nothing. A rootfs
+# with no /dev boots to a dead login prompt, and a rootfs with no files is
+# not a rootfs.
+SRC_FILES=$(find "$ROOTFS_TREE" -type f 2>/dev/null | wc -l)
+[ "$SRC_FILES" -gt 1000 ] || die "the source tree has only $SRC_FILES files — that is not a rootfs.
+  Refusing to build an image from it."
+for d in dev proc sys run tmp etc usr root; do
+    [ -d "$ROOTFS_TREE/$d" ] || die "the source tree has no /$d directory.
+  The init mounts onto these; without them the image will not boot."
+done
+log "  source tree: $SRC_FILES files"
+
+# ---------------------------------------------------------------- check mode
+# Everything above this line is what a build does to the tree: stage it,
+# fix ownership, create the mount points, clear /run, drop the machine-id,
+# reject a desktop, apply the overrides, remove the vendor's leftovers,
+# mask the units that must not run, write the fstab and install the tools.
+# The boot partition is already built (p1, above).
+#
+# --check stops here: the tree and the boot artefacts can be checked
+# against the manifest exactly as a release build would, without composing
+# the 800 MB p2 filesystem or writing an image.
+if [ "$CHECK" = 1 ]; then
+    log "check mode: validating the tree against the manifest (no image written)"
+    "$HERE/check-image.sh" --rootfs "$ROOTFS_TREE" --p1 "$WORK/p1.img" \
+        || die "the tree does not satisfy the manifest (see the failures above)"
+    log "check passed: the tree is buildable"
+    exit 0
+fi
+
+# ---------------------------------------------------------------- p2: compose
 # mke2fs -d populates the filesystem from the directory at creation time.
 # No mount and no loop device, which is what makes this buildable on a
 # machine where the loop module cannot be loaded.
@@ -582,19 +639,6 @@ done
 E2FSPROGS_FAKE_TIME="$SOURCE_DATE_EPOCH" \
 mke2fs -q -F -t ext4 -L ROOTFS -U "$FS_UUID" -E hash_seed="$FS_HASH_SEED" \
        -d "$ROOTFS_TREE" "$WORK/p2.img" || die "mke2fs failed"
-
-# Check the SOURCE before trusting the result. mke2fs -d does not complain
-# about an empty or truncated directory: it builds a filesystem containing
-# exactly what it was given, which may be nothing. A rootfs with no /dev
-# boots to a dead login prompt, and a rootfs with no files is not a rootfs.
-SRC_FILES=$(find "$ROOTFS_TREE" -type f 2>/dev/null | wc -l)
-[ "$SRC_FILES" -gt 1000 ] || die "the source tree has only $SRC_FILES files — that is not a rootfs.
-  Refusing to build an image from it."
-for d in dev proc sys run tmp etc usr root; do
-    [ -d "$ROOTFS_TREE/$d" ] || die "the source tree has no /$d directory.
-  The init mounts onto these; without them the image will not boot."
-done
-log "  source tree: $SRC_FILES files"
 
 # Check the RESULT. The cheapest and most sensitive signal that the
 # filesystem actually got populated is how well it compresses: a real
