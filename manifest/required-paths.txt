@@ -29,6 +29,9 @@
 # to be done on every boot. It also must be ENABLED - see
 # manifest/required-units.txt.
 /etc/systemd/system/enable-hdmi.service 0644
+# Routes the HDMI audio to TDM-C at boot, because the vendor default
+# (Spdif) leaves the HDMI output silent. See docs/audio.md.
+/etc/systemd/system/eon-hdmi-audio.service 0644
 # chrony-wait.service cannot set up a user namespace on this kernel
 # (CONFIG_USER_NS is unset), so it fails and leaves the system "degraded"
 # with one failed unit even though everything works. The drop-in disables

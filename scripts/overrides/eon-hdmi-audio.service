@@ -1,0 +1,26 @@
+[Unit]
+# eon-hdmi-audio.service — route HDMI audio to the path that actually plays.
+#
+# The vendor's default for "HDMITX Audio Source Select" is "Spdif". The
+# HDMI playback path on this box is the TDM-C DAI ("Tdm_C", surfaced as
+# ALSA device hw:0,2, "i2s2hdmi"): opening hw:0,2 and playing produces no
+# sound unless the HDMI transmitter is listening to Tdm_C. Verified on
+# 2026-10-23: a 440 Hz sine on hw:0,2 was inaudible with the default, and
+# audible after this setting (heard on the television).
+#
+# See docs/audio.md.
+Description=Route HDMI audio to TDM-C (i2s2hdmi)
+Documentation=file:/usr/share/doc/eon-audio.md
+After=sound.target alsa-restore.service
+Wants=sound.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# The card is up by the time sound.target is reached; alsa-restore may
+# have restored the vendor default, so this runs after it and wins.
+ExecStart=/usr/bin/amixer -c0 sset 'HDMITX Audio Source Select' Tdm_C
+ExecStart=/usr/bin/amixer -c0 sset 'Audio hdmi-out mute' off
+
+[Install]
+WantedBy=multi-user.target

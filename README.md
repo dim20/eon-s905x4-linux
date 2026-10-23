@@ -43,7 +43,7 @@ Verified on the development box for v0.5.1:
 | Bootcmd installed automatically | ✅ the installer finds the U-Boot environment and sets it |
 | U-Boot recovery window | ✅ `bootdelay=3` — a "hit any key" prompt, when no stick is attached |
 | Root filesystem size | ✅ 15 GB on the eMMC, not the 744 MB it started with |
-| Audio | ❌ never confirmed audible |
+| Audio | ✅ HDMI audio plays (set `HDMITX Audio Source Select` to `Tdm_C`; the image does it at boot — see [`docs/audio.md`](docs/audio.md)) |
 | USB keyboard on the HDMI console | ✅ login and `Ctrl-Alt-F1`…`F6` switching confirmed on the box |
 | WiFi | ❌ no open driver for the RTL8812CS |
 
@@ -109,9 +109,12 @@ escape sequences.
 
 These are real and will bite you:
 
-1. **Audio has never been confirmed audible.** The ASoC card registers
-   and the HDMI transmitter reports a valid audio format, but nobody has
-   heard a speaker.
+1. **Audio over HDMI works, but only with one mixer control set.** The
+   transmitter's `HDMITX Audio Source Select` defaults to `Spdif`, while the
+   playback path is `Tdm_C` (`hw:0,2`); with the default the stream runs and
+   nothing is heard. Set it to `Tdm_C` — the image now does this at boot —
+   and a 440 Hz test tone is audible on the TV. Analog (T9015) and SPDIF
+   outputs were **not** tested. See [`docs/audio.md`](docs/audio.md).
 2. **There is no desktop on the TTY image.** That is deliberate: a
    display manager takes the framebuffer from the text console, and a
    desktop is a large amount of software the user may not want.
@@ -305,6 +308,7 @@ docs/
   power.md                        reboot, poweroff and HDMI hotplug, with evidence
   network.md                      DHCP, static IP, DNS, mDNS, WiFi and Bluetooth
   thermal.md                      a sustained-load run, temperatures and throttling
+  audio.md                        HDMI audio, the mixer trap, and how to test it
   troubleshooting.md              the traps, written down so you can avoid them
   lessons.md                      engineering lessons from this project
   licensing.md                    licences, credits, provenance

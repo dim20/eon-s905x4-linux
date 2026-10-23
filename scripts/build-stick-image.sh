@@ -517,16 +517,23 @@ for u in chronyd-restricted.service boot-run-once-early.service rsync.service; d
 done
 
 # ------------------------------------------------- enable our own units
-# A unit file that is not enabled never runs. enable-hdmi.service
-# programs the HDMI output at boot - the vendor driver leaves the
-# connector disabled, and a mode set is runtime state, so it has to be
-# done on every boot.
+# A unit file that is not enabled never runs.
+#
+#   enable-hdmi.service  programs the HDMI output at boot - the vendor
+#                        driver leaves the connector disabled, and a mode
+#                        set is runtime state, so it has to be done on
+#                        every boot.
+#   eon-hdmi-audio.service  routes the HDMI audio to the TDM-C path. The
+#                        vendor's default source is Spdif, and with it the
+#                        HDMI output is silent (see docs/audio.md).
 WANTS="$ROOTFS_TREE/etc/systemd/system/multi-user.target.wants"
 mkdir -p "$WANTS"
-if [ -f "$ROOTFS_TREE/etc/systemd/system/enable-hdmi.service" ]; then
-    ln -sf /etc/systemd/system/enable-hdmi.service "$WANTS/enable-hdmi.service"
-    log "  enabled enable-hdmi.service"
-fi
+for u in enable-hdmi.service eon-hdmi-audio.service; do
+    if [ -f "$ROOTFS_TREE/etc/systemd/system/$u" ]; then
+        ln -sf "/etc/systemd/system/$u" "$WANTS/$u"
+        log "  enabled $u"
+    fi
+done
 
 # ---------------------------------------------------------------- the fstab
 # The image is built with a FIXED filesystem UUID, so the fstab can be

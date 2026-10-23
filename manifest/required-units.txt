@@ -17,6 +17,12 @@
 # console does not bind, and it is what the rescue path relies on.
 enable-hdmi.service
 
+# --- the HDMI audio ------------------------------------------------------
+# The vendor's default HDMITX audio source is Spdif; the playback path is
+# TDM-C (hw:0,2, i2s2hdmi). Without this unit the HDMI output is silent
+# when you play to hw:0,2. Verified on 2026-10-23 - see docs/audio.md.
+eon-hdmi-audio.service
+
 # --- the services an unattended box needs --------------------------------
 # Debian's OpenSSH unit is ssh.service; sshd.service is only an alias for
 # it, and there is no symlink for the alias.

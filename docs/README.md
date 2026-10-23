@@ -25,6 +25,7 @@ general-purpose Linux computer. It is not a media centre.
 | understand power, reboots and HDMI hotplug | [`power.md`](power.md) |
 | understand networking, static IP, mDNS and WiFi | [`network.md`](network.md) |
 | understand thermals and sustained load | [`thermal.md`](thermal.md) |
+| understand audio and the HDMI mixer trap | [`audio.md`](audio.md) |
 | avoid a trap we already hit | [`troubleshooting.md`](troubleshooting.md), [`lessons.md`](lessons.md) |
 | know the licensing | [`licensing.md`](licensing.md) |
 
