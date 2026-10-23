@@ -169,21 +169,39 @@ What the hardware says:
 - **pulsing the power line** (unbind `aml_wifi`, drive GPIOX_6 low then
   high, rescan) still finds **no card**.
 
-So the SoC side is ready and the chip does not answer. The remaining
-explanations are on the module side: **the WiFi module is most likely not
-populated on this variant** (the same boot also loses the I²C LED
-controllers at `0x60` and `0x5b`), or it is wired to different pins /
-needs a reset sequence the DTB does not describe.
+So the SoC side is ready and the chip does not answer on Linux — but the
+module **is** present: it is soldered on the board, and it worked under
+Android. This is therefore a **vendor Linux bring-up gap**, not absent
+hardware.
+
+What was checked and cleared:
+
+- the DTB is not the difference: `sdio@fe088000` carries `card_type = <3>`,
+  `non-removable`, `cap-sdio-irq`, `keep-power-in-suspend`, SDR104, and the
+  Broadcom `wifi@1` child — the same properties as the vendor's Android DTB
+  (`dev/vd/vendor.dts`);
+- the SDIO pin groups match Android's (`sdio_d0..d3`, `clk`, `cmd`, plus the
+  `GPIOX_4` clock-gate group), and they are muxed live;
+- `aml_wifi` binds, drives `GPIOX_6` high, and programs the 32 kHz LPO PWM
+  (`pwm_channel1_conf` / `pwm_channel2_conf` at ~32.7 kHz are requested and
+  enabled);
+- the defconfig has `CONFIG_MMC=y` and `CONFIG_AMLOGIC_WIFI=y`, and does
+  **not** set `WIFI_POWER_INIT_OFF`, so the driver uses the Android-style
+  "reset and power on" strategy.
+
+What still looks different, and is where the effort would go:
+
+- `/sys/bus/sdio/drivers/` is **empty** — no SDIO client driver is
+  registered at all (the vendor's `bcmdhd` SDIO glue is the usual entry);
+- the vendor's Android kernel and their Linux BSP are different trees; the
+  Linux BSP may simply not have finished the bring-up for this module.
 
 `/etc/systemd/network/20-wlan0.network` is present and does DHCP with
-`RouteMetric=4096`, so Ethernet wins whenever both are up. If a variant
-with a working card ever appears, that file applies with no change. The
-vendor's out-of-tree drivers (`drivers/xtra`: MT7668 and several Realtek
-parts) are built for the vendor's 6.18.55 kernel and cannot be loaded into
-ours; see the vendor-leftovers inventory.
+`RouteMetric=4096`, so Ethernet wins whenever both are up. If the Linux
+bring-up is finished, that file applies with no change.
 
-**Do not expect this image to bring up wireless.** On this box there is
-nothing to bring up.
+**Do not expect this image to bring up wireless.** The hardware is there;
+the Linux driver path is not finished.
 
 ## Bluetooth
 
@@ -214,7 +232,8 @@ trust. See the README's security note.
 - mDNS off; the global + per-link recipe was applied and reverted, and
   `eth0` showed `+mDNS` while it was on; no second mDNS peer for an
   end-to-end lookup;
-- no `wlan0`: the SDIO bus finds **no card**, even after a host rebind and
-  a power pulse on GPIOX_6; the DTB, power GPIO and pinmux are all in
-  place, so the module is most likely not populated on this variant;
+- no `wlan0`: the module **is present** (worked under Android) but the SDIO
+  bus finds no card even after a host rebind and a power pulse; the DTB,
+  pinmux, power GPIO and 32 kHz LPO PWM are all correct, so this is a
+  vendor **Linux** bring-up gap, not missing hardware;
 - Bluetooth unverified (no `/sys/class/bluetooth` device).
