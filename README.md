@@ -26,7 +26,7 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 The desktop is **frozen** and returns as an optional package set, not as a
 second image.
 
-Verified on the development box for v0.5.1:
+Verified on the development box for v0.7.1-tty:
 
 | | |
 |---|---|

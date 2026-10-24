@@ -62,6 +62,10 @@
 !/run/sshd
 
 # --- the vendor's kernel modules: NOT forbidden, and why ------------------
+#
+# PLANNED RULE — NOT ENFORCED. The rule below belongs here only once the
+# modules are actually removed (P1-16). Until then it stays a comment so
+# the manifest does not imply protection it does not provide.
 # This file used to forbid "/lib/modules/*". That rule never matched
 # anything: on Debian 13 /lib is a symlink to usr/lib (see
 # manifest/inventory.txt), and `find` does not follow symlinks. The
