@@ -1,20 +1,26 @@
 # Starting from an untouched or OTA-upgraded box
 
-This is the path for a box that still has its **factory bootloader and
-Android**, with no prior modification. It is the box you get from the
-supplier or after an OTA update. It does **not** boot the USB stick
-automatically. You need the serial console once, but you do **not** need
-a fastboot bootloader unlock to boot the stick or to install Debian.
+This is the path for a box that still has its **factory bootloader and a
+working Android** on the eMMC, with no prior modification. It is the box
+you get from the supplier or after an OTA update. A box in that state does
+**not** boot the USB stick automatically. You need the serial console
+once, but you do **not** need a fastboot bootloader unlock to boot the
+stick or to install Debian.
+
+If your box **does** boot the stick on its own, its eMMC boot is already
+failing and the vendor's fallback is doing it — see "Why one box
+autoboots the stick and another does not" below. The install path is the
+same.
 
 The end state is the same as any other EON Linux box: Debian on the
 eMMC, booting unattended with nothing plugged in.
 
 ---
 
-## What the factory bootloader actually does
+## What the vendor bootloader actually does
 
-The environment on the tested factory box (`sc2_ah212`,
-serial `UGA22411021679`) is the vendor's:
+Every tested box — factory, OTA-upgraded and "unlocked" — carries the
+same stock environment (`sc2_ah212`):
 
 ```text
 bootcmd=run storeboot
@@ -26,19 +32,51 @@ preboot=run bcb_cmd; run upgrade_check; run init_display; run storeargs;
 
 - `switch_bootmode` falls through to `storeboot`.
 - `storeboot` reads the eMMC's `boot_a` partition and boots Android.
-- **The default path never tries USB.** The USB scan in the boot log is
-  the vendor's factory-update check looking for `factory_update_param.aml`.
-  Our Linux stick does not carry that file, so the check fails with:
+- **If that succeeds, USB is never touched.**
+- **If it fails, the vendor's fallback takes over.** `storeboot` ends
+  with `echo try upgrade as booting failure; run update`, and:
 
   ```text
-  fail in cmd [fatsize usb 0 factory_update_param.aml], rcode 1
-  ERR ... File factory_update_param.aml not exist in sdcard??
+  update=run usb_burning; run recovery_from_sdcard;
+         run recovery_from_udisk; run recovery_from_flash;
   ```
 
-  That message is expected and harmless. It is why the box stops at the
-  U-Boot prompt instead of booting the stick.
+  `usb_burning=adnl 1200` offers Amlogic's ADNL burning mode (it times
+  out if no host is running the burning tool), then the SD card is
+  tried, then `recovery_from_udisk`, which starts USB and runs
+  `aml_autoscript` from the stick's FAT partition. That last step is why
+  a box with a broken eMMC boot **boots our stick automatically**.
 
-The environment does contain a USB recovery path:
+  This is the vendor's emergency fallback. It is **not** an unlock and
+  **not** a `bootcmd` change.
+
+The `factory_update_param.aml` message in the boot log is the vendor's
+factory-update check looking for an INI file. Our Linux stick does not
+carry it, so the check fails with:
+
+```text
+fail in cmd [fatsize usb 0 factory_update_param.aml], rcode 1
+ERR ... File factory_update_param.aml not exist in sdcard??
+```
+
+That message is expected and harmless.
+
+### Why one box autoboots the stick and another does not
+
+| Box state | What happens on power-on |
+|---|---|
+| eMMC boots Android normally | `storeboot` boots Android; the stick is ignored |
+| eMMC boot fails — for example an edited `vbmeta` failing AVB verification | `storeboot` falls to `update` → `recovery_from_udisk` → **the stick boots automatically** |
+| eMMC boot fails and no stick is inserted | the fallback chain runs out and the box stops at the U-Boot prompt |
+
+A box that autoboots the stick is therefore telling you its eMMC boot is
+broken, not that it was "unlocked to prefer USB". Installing EON Linux to
+the eMMC fixes that, because the installer replaces the boot command and
+the boot partition.
+
+### The USB recovery path in the environment
+
+The environment also names the recovery path directly:
 
 ```text
 recovery_from_udisk=setenv bootargs ${bootargs} androidboot.selinux=permissive;
@@ -48,16 +86,18 @@ recovery_from_fat_dev=setenv loadaddr ${loadaddr_kernel};
     autoscr ${loadaddr}; fi; ...
 ```
 
-So the stick is reachable; the factory's default boot order just does not
-choose it.
+So the stick is reachable; the vendor's default boot order just does not
+choose it while the eMMC boots.
 
 ### No unlock required
 
 The prompt is open, and `forUpgrade_secureBoot=false`. The board accepts
-commands at the U-Boot prompt without a fastboot unlock. An **unlocked**
-secondary box picks up the stick immediately because its `bootcmd`
-already prefers USB — that is an environment difference, not a hardware
-unlock. The factory box needs one command, described below.
+commands at the U-Boot prompt without a fastboot unlock. **No tested box
+has a modified `bootcmd`:** the factory box, the OTA-upgraded box and the
+"unlocked" experiment box all report `bootcmd=run storeboot`. The box
+that autoboots the stick does so because its eMMC boot fails and the
+vendor fallback picks USB — see the table above. The factory box needs
+one command, described below.
 
 ---
 
@@ -67,7 +107,7 @@ unlock. The factory box needs one command, described below.
 |---|---|
 | CP210x USB-UART adapter | Wired to the board's UART pads: GND, TX, RX. Opening the case is a hardware step. |
 | USB stick | Flashed with the published `v0.7.1-tty` image (1 GB or more). |
-| Serial terminal | `screen`, `picocom`, `minicom`, or the scripts in the development repository. |
+| Serial terminal | `screen`, `picocom`, `minicom`, or the scripts in the project's development repository. |
 
 ### Serial speed
 
@@ -98,16 +138,16 @@ reconnect at the rate the kernel is using.
    paths; those are the invasive fallbacks.
 4. Confirm the prompt answers `printenv`.
 
-**Back up the environment before changing anything.** The full
-`printenv` from the tested box is in the development repository under
-`serial/secondbox-sc2_ah212-printenv-2026-10-24.txt`. At minimum, save
-your own:
+**Back up the environment before changing anything.** Save your own
+`printenv` output somewhere you can find it:
 
 ```text
 printenv
 ```
 
-If you later change `bootcmd`, the original values are your way back.
+If you later change `bootcmd`, the original values are your way back. The
+environment from the boxes used to write this guide is kept in the
+project's development repository, not in this one.
 
 ---
 
@@ -144,8 +184,8 @@ than a retry.
 - `/root/smoke-test.sh` passed **24/24 checks, exit 0**.
 - The box booted **without** a fastboot unlock.
 
-The serial evidence is in the development repository under
-`serial/secondbox-factory-*-2026-10-24.log`.
+The serial evidence is kept in the project's development repository, not
+in this one.
 
 ---
 

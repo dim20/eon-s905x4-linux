@@ -77,6 +77,11 @@ When two sources disagree, the higher one wins.
   unlock is needed**. `run recovery_from_udisk` booted the v0.7.1 stick
   on a factory S905X4, and `smoke-test.sh` passed 24/24. See
   [`factory-box-install.md`](factory-box-install.md).
+- A box whose **eMMC boot fails** — for example after its `vbmeta` was
+  edited — **autoboots the USB stick**. That is the vendor's emergency
+  fallback (`storeboot` → `update` → `recovery_from_udisk`), not an
+  unlock and not a modified `bootcmd`: every tested box, including the
+  "unlocked" one, still reports `bootcmd=run storeboot`.
 - The **desktop is frozen** and returns as an optional package set. The
   v0.6 asset was *named* for a desktop it does not contain; its terminal
   text was unreadable in the box's own desktop install. See
