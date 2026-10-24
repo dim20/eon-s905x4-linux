@@ -354,6 +354,17 @@ if [ -d "$HERE/overrides" ]; then
                 esac
             done
             rm -rf "$ROOTFS_TREE/usr/lib/qubian/update-motd.d"
+            # In some trees the vendor's hooks are regular files, not
+            # symlinks (a previous build copied rather than symlinked
+            # them). They still carry the vendor's name in their comments,
+            # and the smoke test rejects ANY vendor string in the login
+            # files. Remove them by name; ours are 01-eon-header and
+            # 15-eon-system-state, installed below.
+            for f in "$dest"/*quban* "$dest"/*qubian*; do
+                [ -e "$f" ] || continue
+                rm -f "$f"
+                log "  removed the vendor's login-message file $(basename "$f")"
+            done
             # Remove any entry with the same name first. The vendor image
             # has these as DANGLING SYMLINKS into a directory that is not
             # installed, and cp refuses to write through a dangling
@@ -574,16 +585,13 @@ fi
 # ------------------------------------------------- the units we enable
 # The build cannot run systemctl, so the wants-symlinks are made here.
 #
-# fontconfig-cache.service builds the font cache before anything
-# graphical starts. Without it, the first graphical program gets a
-# two-pixel default font and its text is invisible - an xterm's window
-# came out 173x62 pixels for 80x24 characters.
-for u in fontconfig-cache.service; do
-    mkdir -p "$ROOTFS_TREE/etc/systemd/system/multi-user.target.wants"
-    ln -sf "/etc/systemd/system/$u" \
-          "$ROOTFS_TREE/etc/systemd/system/multi-user.target.wants/$u"
-    log "  enabled $u"
-done
+# fontconfig-cache.service used to be enabled here. It builds the font
+# cache before anything graphical starts, which matters for a desktop -
+# but this TTY image has no fontconfig and no /usr/bin/fc-cache, so the
+# unit failed at boot with status=203/EXEC. It belongs with the optional
+# desktop set, not here. Remove it if the source tree still carries it.
+rm -f "$ROOTFS_TREE/etc/systemd/system/fontconfig-cache.service"
+rm -f "$ROOTFS_TREE/etc/systemd/system/multi-user.target.wants/fontconfig-cache.service"
 
 # ---------------------------------------------------------------- the tools
 # The image ships scripts that use other programs, and a script that fails

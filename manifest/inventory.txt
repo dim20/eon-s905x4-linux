@@ -784,7 +784,6 @@ l	777	0:0	-	/usr/lib/systemd/system/systemd-resolved.service	etc/systemd/system/
 l	777	0:0	-	/usr/lib/systemd/system/systemd-timesyncd.service	etc/systemd/system/dbus-org.freedesktop.timesync1.service
 f	644	0:0	1484	-	etc/systemd/system/enable-hdmi.service
 f	644	0:0	1036	-	etc/systemd/system/eon-hdmi-audio.service
-f	644	0:0	773	-	etc/systemd/system/fontconfig-cache.service
 d	755	0:0	-	-	etc/systemd/system/getty.target.wants
 l	777	0:0	-	/usr/lib/systemd/system/getty@.service	etc/systemd/system/getty.target.wants/getty@tty1.service
 l	777	0:0	-	/usr/lib/leds-fd6513/leds-fd6513.service	etc/systemd/system/leds-fd6513.service
@@ -795,7 +794,6 @@ l	777	0:0	-	/usr/lib/systemd/system/console-setup.service	etc/systemd/system/mul
 l	777	0:0	-	/usr/lib/systemd/system/e2scrub_reap.service	etc/systemd/system/multi-user.target.wants/e2scrub_reap.service
 l	777	0:0	-	/etc/systemd/system/enable-hdmi.service	etc/systemd/system/multi-user.target.wants/enable-hdmi.service
 l	777	0:0	-	/etc/systemd/system/eon-hdmi-audio.service	etc/systemd/system/multi-user.target.wants/eon-hdmi-audio.service
-l	777	0:0	-	/etc/systemd/system/fontconfig-cache.service	etc/systemd/system/multi-user.target.wants/fontconfig-cache.service
 l	777	0:0	-	/usr/lib/systemd/system/remote-fs.target	etc/systemd/system/multi-user.target.wants/remote-fs.target
 l	777	0:0	-	/usr/lib/systemd/system/rng-tools-debian.service	etc/systemd/system/multi-user.target.wants/rng-tools-debian.service
 l	777	0:0	-	/usr/lib/systemd/system/ssh.service	etc/systemd/system/multi-user.target.wants/ssh.service
@@ -874,9 +872,7 @@ d	755	0:0	-	-	etc/ufw/applications.d
 f	644	0:0	145	-	etc/ufw/applications.d/openssh-server
 d	755	0:0	-	-	etc/update-motd.d
 f	755	0:0	1100	-	etc/update-motd.d/01-eon-header
-f	755	0:0	1050	-	etc/update-motd.d/01-quban-header
 f	755	0:0	1342	-	etc/update-motd.d/15-eon-system-state
-f	755	0:0	1096	-	etc/update-motd.d/15-qubian-system-state
 l	777	0:0	-	default/keyboard	etc/vconsole.conf
 d	755	0:0	-	-	etc/wpa_supplicant
 f	755	0:0	941	-	etc/wpa_supplicant/action_wpa.sh
