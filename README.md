@@ -72,8 +72,13 @@ gunzip -c eon-s905x4-linux-stick.img.gz | sudo dd of=/dev/sdX bs=4M status=progr
 sync
 ```
 
-Plug it into the box and power cycle. The box boots the stick, brings up
-networking and SSH, and gives you a login (`root` / `tvbox`):
+Plug it into the box and power cycle. **On a box whose U-Boot already
+prefers USB, the box boots the stick automatically.** On an untouched or
+OTA-upgraded factory box it does not: its U-Boot boots the eMMC first. You
+need the serial console once and the command `run recovery_from_udisk`;
+see [`docs/factory-box-install.md`](docs/factory-box-install.md). Once the
+stick is booted, either way it brings up networking and SSH and gives you
+a login (`root` / `tvbox`):
 
 ```sh
 ssh root@<the address the box prints on the console>

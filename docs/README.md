@@ -18,6 +18,7 @@ general-purpose Linux computer. It is not a media centre.
 | understand what is true right now | this page, then [`../README.md`](../README.md) |
 | know what is planned | `plan/PLAN-OF-RECORD.md` in the development repository (not part of this one) |
 | fix a box that will not boot | [`recovery.md`](recovery.md) |
+| start from an untouched or OTA-upgraded box | [`factory-box-install.md`](factory-box-install.md) — serial console, manual USB boot, install to eMMC |
 | rebuild the kernel or the image | [`build-the-kernel.md`](build-the-kernel.md), [`kernel-package.md`](kernel-package.md) |
 | understand the display path | [`framebuffer.md`](framebuffer.md) |
 | understand storage, TRIM and eMMC wear | [`storage.md`](storage.md) |
@@ -71,6 +72,11 @@ When two sources disagree, the higher one wins.
   first build had. It was then **installed on the eMMC and cold-booted
   with no stick present**: it came up on `/dev/mmcblk0p2`, 0 failed
   units, and passed the smoke test again.
+- An **untouched factory box** does not autoboot the USB stick: its
+  U-Boot boots the eMMC first. The prompt is open and **no fastboot
+  unlock is needed**. `run recovery_from_udisk` booted the v0.7.1 stick
+  on a factory S905X4, and `smoke-test.sh` passed 24/24. See
+  [`factory-box-install.md`](factory-box-install.md).
 - The **desktop is frozen** and returns as an optional package set. The
   v0.6 asset was *named* for a desktop it does not contain; its terminal
   text was unreadable in the box's own desktop install. See

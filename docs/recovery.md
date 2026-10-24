@@ -6,6 +6,12 @@ write anything to one.
 Read this before provisioning hardware. Most of the difficulty described in this
 project came from not having this written down.
 
+If the box is **untouched or OTA-upgraded** and still runs the factory
+bootloader, the first-boot path is different: see
+[`factory-box-install.md`](factory-box-install.md). The prompt is open and no
+fastboot unlock is needed; the factory's default `bootcmd` simply never tries
+USB.
+
 ---
 
 ## The recovery ladder
