@@ -54,19 +54,21 @@ When two sources disagree, the higher one wins.
 3. **One question, one answer.** If two documents answer the same
    question, one of them links to the other.
 
-## What is true now (2026-10-23)
+## What is true now (2026-10-24)
 
 - The **text console on HDMI works**: the kernel takes the display over
   at about 12–18 s (`fbcon: Taking over console`, then
   `Console: switching to colour frame buffer device 240x67`), because no
   display manager is running.
-- The **latest release is v0.7-tty** (2026-10-23), the text-console
-  product. See [`../README.md`](../README.md) and
-  [`releases/v0.7-tty.md`](releases/v0.7-tty.md).
-- The **image file has been exercised end-to-end**: written to a stick,
-  verified with `cmp`, booted on the box; the root filesystem stayed
-  ~800 MiB and p1 carried `Image`, the DTB and `aml_autoscript`. See
-  [`releases/errata-v0.7.md`](releases/errata-v0.7.md) Addendum 1.
+- The **latest release is v0.7.1-tty** (2026-10-24), the text-console
+  product with HDMI audio, the clock fallback, the hostname fix and the
+  smoke test. See [`../README.md`](../README.md) and
+  [`releases/v0.7.1-tty.md`](releases/v0.7.1-tty.md).
+- The **v0.7.1 image has been exercised end-to-end**: written to a stick,
+  read back in full with `cmp`, booted on the box; the text console came
+  up, the root was `/dev/sda2`, and `smoke-test.sh` passed **24/24,
+  exit 0**. That boot is what closed the two branding/unit defects the
+  first build had.
 - The **desktop is frozen** and returns as an optional package set. The
   v0.6 asset was *named* for a desktop it does not contain; its terminal
   text was unreadable in the box's own desktop install. See

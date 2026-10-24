@@ -284,9 +284,10 @@ boot partition against their expected hashes, and the running system. It
 is read-only. Exit status 0 means everything passed; `--quiet` prints only
 the failures.
 
-**The published v0.7-tty image predates this script**, so on that download
-the file is not there. Copy `scripts/smoke-test.sh` to `/root` on the box
-if you want it; every image built from this tree afterwards carries it.
+**The published v0.7-tty image predates this script; v0.7.1-tty carries
+it**, so on the older download the file is not there. Copy
+`scripts/smoke-test.sh` to `/root` on the box if you want it; every image
+built from this tree afterwards carries it.
 
 ---
 
