@@ -63,13 +63,13 @@ That is a recipe, not the default.
 
 ### Hostname
 
-The hostname is `eon-sc2` (`/etc/hostname`). The build now adds
+The hostname is `sc2` (`/etc/hostname`). The build now adds
 
 ```
-127.0.1.1   eon-sc2
+127.0.1.1   sc2
 ```
 
-to `/etc/hosts`, so `hostname -f` and `getent hosts eon-sc2` work locally.
+to `/etc/hosts`, so `hostname -f` and `getent hosts sc2` work locally.
 The vendor's `127.0.0.1 tvbox` line is left alone; it is harmless.
 
 Without that line, `hostname -f` fails with `Name or service not known`,
@@ -225,8 +225,8 @@ trust. See the README's security note.
 - eth0 DHCP via systemd-networkd: `192.168.1.20/24`, gateway
   `192.168.1.1`, 100 Mbps full duplex, IPv4 and IPv6;
 - `resolv.conf` static (`8.8.8.8`, `1.1.1.1`), mode `foreign`;
-- `hostname -f` → `eon-sc2` after the `/etc/hosts` fix; `getent hosts
-  eon-sc2` → `127.0.1.1`;
+- `hostname -f` → `sc2` after the `/etc/hosts` fix; `getent hosts
+  sc2` → `127.0.1.1`;
 - static-address mechanism tested on `dummy0` (address applied, ping
   worked, eth0 unaffected); the exact eth0 change not applied live;
 - mDNS off; the global + per-link recipe was applied and reverted, and

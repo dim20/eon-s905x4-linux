@@ -1,5 +1,5 @@
 [Unit]
-# eon-hdmi-audio.service — route HDMI audio to the path that actually plays.
+# sc2-hdmi-audio.service — route HDMI audio to the path that actually plays.
 #
 # The vendor's default for "HDMITX Audio Source Select" is "Spdif". The
 # HDMI playback path on this box is the TDM-C DAI ("Tdm_C", surfaced as
@@ -10,7 +10,7 @@
 #
 # See docs/audio.md.
 Description=Route HDMI audio to TDM-C (i2s2hdmi)
-Documentation=file:/usr/share/doc/eon-audio.md
+Documentation=file:/usr/share/doc/sc2-audio.md
 After=sound.target alsa-restore.service
 Wants=sound.target
 

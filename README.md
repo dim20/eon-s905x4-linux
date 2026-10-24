@@ -1,4 +1,4 @@
-# eon-s905x4-linux — EON Linux
+# sc2-linux — SC2 Linux
 
 Debian on the **EON SDSTB02** (Greek EON / NOVA set-top box, built by
 SDMC) — an Amlogic **S905X4 / SC2** box with 2 GB LPDDR4 and 14.6 GB
@@ -7,6 +7,9 @@ eMMC — turned into a small, silent, general-purpose Linux computer.
 The box ships with a locked Android bootloader and no way to boot
 anything else. This project gets it to boot Debian from eMMC,
 unattended, with nothing plugged in.
+
+**Not affiliated with Amlogic, SDMC, or EON/NOVA.** "EON SDSTB02" and
+"Amlogic S905X4" are used descriptively to identify the hardware.
 
 ```
 UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
@@ -18,10 +21,11 @@ UNMODIFIED BOX + USB STICK  →  POWER CYCLE  →  LINUX, NOBODY TOUCHES IT
 
 | | |
 |---|---|
-| **Latest release** | **v0.7.1-tty** — the text console on HDMI and on serial; HDMI audio, the clock fallback, the hostname fix and the smoke test |
-| **Previous TTY release** | **v0.7-tty** — the text console as a product |
-| **The "desktop" release** | **v0.6-desktop** — named for a desktop its asset does not contain. See [`docs/releases/errata-v0.6.md`](docs/releases/errata-v0.6.md) |
-| **Next** | **P1** — a solid base: audio, power, thermal, storage, smoke test |
+| **Latest release** | **v0.7.2-sc2** — the SC2 Linux rename: the same kernel and image changes as v0.7.1-tty, new branding. Built and manifest-checked; hardware smoke test pending. See [`docs/releases/v0.7.2-sc2.md`](docs/releases/v0.7.2-sc2.md) |
+| **Previous release** | **v0.7.1-tty** — the text console on HDMI and on serial; HDMI audio, the clock fallback, the hostname fix and the smoke test *(legacy EON branding)* |
+| **Previous TTY release** | **v0.7-tty** — the text console as a product *(legacy EON branding)* |
+| **The "desktop" release** | **v0.6-desktop** — named for a desktop its asset does not contain. See [`docs/releases/errata-v0.6.md`](docs/releases/errata-v0.6.md) *(legacy EON branding)* |
+| **Next development** | **P1** — a solid base: audio, power, thermal, storage, smoke test |
 
 The desktop is **frozen** and returns as an optional package set, not as a
 second image.
@@ -50,7 +54,7 @@ Verified on the development box for v0.7.1-tty:
 In **v0.7-tty**:
 
 - the framebuffer fixes (`fix.smem_start`, the buffer's lifetime);
-- the kernel as an installable package, labelled `5.4.210-eon3`, with
+- the kernel as an installable package, labelled `5.4.210-sc2`, with
   rollback ([`docs/kernel-package.md`](docs/kernel-package.md)); its
   `uname -r` is the vendor tree's own string, and the document explains
   why the two differ;
@@ -63,12 +67,17 @@ In **v0.7-tty**:
 
 ## Quick start
 
-Download the TTY image (**v0.7.1-tty**, `v0.7.1-tty-img.gz`; the same bytes
-are also published as `eon-s905x4-linux-stick.img.gz`) and write it to a
-USB stick of 1 GB or more:
+Download the verified TTY image (**v0.7.1-tty**, `v0.7.1-tty-img.gz`; the
+same bytes are also at the legacy current name
+`eon-s905x4-linux-stick.img.gz`) and write it to a USB stick of 1 GB or
+more. The SC2 Linux rename build, **v0.7.2-sc2**, is prepared and
+manifest-checked but its hardware smoke test is still pending; its image
+is `v0.7.2-img.gz`, also published as the new current name
+`sc2-linux-stick.img.gz`. Use v0.7.1-tty until v0.7.2-sc2 has passed the
+hardware test.
 
 ```sh
-gunzip -c eon-s905x4-linux-stick.img.gz | sudo dd of=/dev/sdX bs=4M status=progress
+gunzip -c v0.7.1-tty-img.gz | sudo dd of=/dev/sdX bs=4M status=progress
 sync
 ```
 
@@ -437,7 +446,7 @@ which is GPL-2.0, and the corresponding source for it is that upstream
 project. The kernel's source provenance is in
 [`docs/build-the-kernel.md`](docs/build-the-kernel.md), as GPL-2.0 requires.
 The base system is Debian, and remains Debian: `/etc/os-release` says so
-truthfully. The port identifies itself in `/etc/eon-release`, the login
+truthfully. The port identifies itself in `/etc/sc2-release`, the login
 banner and the login message.
 
 Full detail, and the credits this project owes, are in

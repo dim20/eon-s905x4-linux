@@ -40,7 +40,7 @@ mount -t tmpfs    tmpfs    /run      2>/dev/null
 # ---------------------------------------------------------------- hostname
 HN=$(cat /proc/sys/kernel/hostname 2>/dev/null)
 case "$HN" in
-    ""|"(none)") HN=eon-sc2 ;;
+    ""|"(none)") HN=sc2 ;;
 esac
 echo "$HN" > /proc/sys/kernel/hostname 2>/dev/null
 echo "$HN" > /etc/hostname 2>/dev/null

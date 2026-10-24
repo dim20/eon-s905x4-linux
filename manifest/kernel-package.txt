@@ -13,11 +13,11 @@
 
 # The package's name.
 #
-# It is called "eon-kernel" and not "linux-image-..." on purpose: it is
+# It is called "sc2-kernel" and not "linux-image-..." on purpose: it is
 # not a Debian kernel package, it does not follow the Debian kernel
 # package layout, and pretending otherwise would make it look
 # interchangeable with something it is not.
-package-name = eon-kernel
+package-name = sc2-kernel
 
 # The architecture the package is built for. The kernel is an arm64
 # Image and the scripts assume the tools on the box.
@@ -25,14 +25,14 @@ package-architecture = arm64
 
 # The files the package must contain, one per line.
 #
-# The kernel and the device tree are under /usr/lib/eon-kernel/<version>/
+# The kernel and the device tree are under /usr/lib/sc2-kernel/<version>/
 # so that several versions can be installed at once and the operator
 # can choose between them.
 #
 # The two commands are what the operator uses to choose and to see.
-package-files = usr/lib/eon-kernel/activate
-package-files = usr/sbin/eon-kernel-list
-package-files = usr/sbin/eon-kernel-select
+package-files = usr/lib/sc2-kernel/activate
+package-files = usr/sbin/sc2-kernel-list
+package-files = usr/sbin/sc2-kernel-select
 
 # The maintainer scripts the package must have.
 #
@@ -44,7 +44,7 @@ package-scripts = prerm
 package-scripts = postrm
 
 # The kernel, the device tree and the hashes travel together, under
-# /usr/lib/eon-kernel/<version>/ - so that several versions can be
+# /usr/lib/sc2-kernel/<version>/ - so that several versions can be
 # installed at once and the operator can choose between them. The
 # checker knows the version from the package itself.
 #

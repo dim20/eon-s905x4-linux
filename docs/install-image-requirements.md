@@ -299,7 +299,7 @@ made from a comment-stripped copy.
 published image from a prepared rootfs tree:
 
 ```sh
-./scripts/build-stick-image.sh ./rootfs-tree dist/eon-s905x4-linux-stick.img.gz
+./scripts/build-stick-image.sh ./rootfs-tree dist/sc2-linux-stick.img.gz
 ```
 
 It needs `mke2fs`, `mkfs.vfat`, `mtools`, `debugfs`, `sfdisk` and `gzip` —

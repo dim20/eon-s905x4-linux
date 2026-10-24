@@ -406,7 +406,7 @@ check_package() {
     if [ -f "$sums" ]; then
         local ver dir want got
         ver=$(dpkg-deb --field "$PACKAGE" Version 2>/dev/null || true)
-        dir="$tmp/usr/lib/eon-kernel/$ver"
+        dir="$tmp/usr/lib/sc2-kernel/$ver"
         for f in Image sc2_s905x4_ah212_linux.dtb; do
             want=$(awk -v n="$f" '{n=$2; sub(/.*\//,"",n); if (n==v) print $1}' v="$f" "$sums")
             [ -n "$want" ] || continue

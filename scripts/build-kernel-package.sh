@@ -39,9 +39,9 @@
 #
 # THE ROLLBACK
 #
-#   apt install ./linux-image-eon_....deb     install a new kernel
-#   eon-kernel-select <version>               choose which one boots
-#   eon-kernel-list                           what is installed
+#   apt install ./linux-image-sc2_....deb     install a new kernel
+#   sc2-kernel-select <version>               choose which one boots
+#   sc2-kernel-list                           what is installed
 #
 #   The package's postinst never changes which kernel boots on its own:
 #   installing a kernel is not the same as choosing it. The first
@@ -83,7 +83,7 @@ done
 [ -f "$KERNEL" ]  || die "no such file: $KERNEL"
 [ -f "$DTB" ]     || die "no such file: $DTB"
 
-[ -n "$OUT" ] || OUT="$REPO/dist/linux-image-eon_${VERSION}_arm64.deb"
+[ -n "$OUT" ] || OUT="$REPO/dist/linux-image-sc2_${VERSION}_arm64.deb"
 
 # The version must be a valid Debian version: it ends up in a package
 # name and in a directory name, and a slash or a space in either is a
@@ -102,16 +102,16 @@ mkdir -p "$WORK/pkg/DEBIAN"
 # The layout is the one the boot code expects. The kernel and the
 # device tree are named after the version so that several can be
 # installed at once and the operator can choose between them.
-install -Dm644 "$KERNEL" "$WORK/pkg/usr/lib/eon-kernel/$VERSION/Image"
-install -Dm644 "$DTB"    "$WORK/pkg/usr/lib/eon-kernel/$VERSION/sc2_s905x4_ah212_linux.dtb"
+install -Dm644 "$KERNEL" "$WORK/pkg/usr/lib/sc2-kernel/$VERSION/Image"
+install -Dm644 "$DTB"    "$WORK/pkg/usr/lib/sc2-kernel/$VERSION/sc2_s905x4_ah212_linux.dtb"
 
 # The hashes travel with the package, so that what was installed can
 # always be checked against what was published.
 {
     echo "# The artefacts this package installs."
     echo "# Verified by the postinst after it writes them to the boot partition."
-    ( cd "$WORK/pkg/usr/lib/eon-kernel/$VERSION" && sha256sum Image sc2_s905x4_ah212_linux.dtb )
-} > "$WORK/pkg/usr/lib/eon-kernel/$VERSION/SHA256SUMS"
+    ( cd "$WORK/pkg/usr/lib/sc2-kernel/$VERSION" && sha256sum Image sc2_s905x4_ah212_linux.dtb )
+} > "$WORK/pkg/usr/lib/sc2-kernel/$VERSION/SHA256SUMS"
 
 # ---------------------------------------------------------------- scripts
 install -Dm755 "$HERE/kernel-package/postinst" "$WORK/pkg/DEBIAN/postinst"
@@ -119,36 +119,36 @@ install -Dm755 "$HERE/kernel-package/prerm"   "$WORK/pkg/DEBIAN/prerm"
 install -Dm755 "$HERE/kernel-package/postrm"  "$WORK/pkg/DEBIAN/postrm"
 
 # The two commands the operator uses.
-install -Dm755 "$HERE/kernel-package/eon-kernel-list"   "$WORK/pkg/usr/sbin/eon-kernel-list"
-install -Dm755 "$HERE/kernel-package/eon-kernel-select" "$WORK/pkg/usr/sbin/eon-kernel-select"
+install -Dm755 "$HERE/kernel-package/sc2-kernel-list"   "$WORK/pkg/usr/sbin/sc2-kernel-list"
+install -Dm755 "$HERE/kernel-package/sc2-kernel-select" "$WORK/pkg/usr/sbin/sc2-kernel-select"
 
-# The shared activation logic. The postinst and eon-kernel-select both
+# The shared activation logic. The postinst and sc2-kernel-select both
 # call it, so there is exactly one implementation of "write a kernel to
 # the boot partition, archive what was there, and verify the write".
-install -Dm755 "$HERE/kernel-package/activate" "$WORK/pkg/usr/lib/eon-kernel/activate"
+install -Dm755 "$HERE/kernel-package/activate" "$WORK/pkg/usr/lib/sc2-kernel/activate"
 
 # The documentation ships with the package, so that a box that has the
 # package has the instructions even without the internet.
-install -Dm644 "$REPO/docs/kernel-package.md" "$WORK/pkg/usr/share/doc/eon-kernel/$VERSION/kernel-package.md"
+install -Dm644 "$REPO/docs/kernel-package.md" "$WORK/pkg/usr/share/doc/sc2-kernel/$VERSION/kernel-package.md"
 
 # ---------------------------------------------------------------- control
 cat > "$WORK/pkg/DEBIAN/control" <<EOF
-Package: eon-kernel
+Package: sc2-kernel
 Version: $VERSION
 Section: kernel
 Priority: optional
 Architecture: arm64
-Maintainer: eon-s905x4-linux contributors
-Installed-Size: $(du -ks "$WORK/pkg/usr/lib/eon-kernel/$VERSION" | cut -f1)
-Description: The EON SDSTB02 (Amlogic S905X4) kernel, installable and selectable
- The kernel for the EON SDSTB02 set-top box, packaged so that it can be
+Maintainer: sc2-linux contributors
+Installed-Size: $(du -ks "$WORK/pkg/usr/lib/sc2-kernel/$VERSION" | cut -f1)
+Description: The SC2 Linux kernel for the EON SDSTB02 (Amlogic S905X4), installable and selectable
+ The SC2 Linux kernel for the EON SDSTB02 set-top box, packaged so that it can be
  installed with apt and switched between versions without a USB stick and
  without rebuilding anything.
  .
  The kernel is written to the boot partition, which is where the vendor's
  U-Boot reads it from - not to the root filesystem's /boot, which is empty
- on this box. Several versions can be installed at once; eon-kernel-list
- shows them and eon-kernel-select chooses which one boots.
+ on this box. Several versions can be installed at once; sc2-kernel-list
+ shows them and sc2-kernel-select chooses which one boots.
  .
  This package contains no modules: the kernel is built with everything
  built in.

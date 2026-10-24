@@ -3,7 +3,7 @@
 #
 # The output is a single .img.gz you can `dd` onto a USB stick:
 #
-#     gunzip -c eon-s905x4-linux-stick.img.gz | sudo dd of=/dev/sdX bs=4M
+#     gunzip -c sc2-linux-stick.img.gz | sudo dd of=/dev/sdX bs=4M
 #
 # GEOMETRY
 #   p1  64MB  FAT32 (LBA)   LBA 32768    boot artefacts, flat (no d/)
@@ -74,7 +74,7 @@ if [ "${1:-}" = "--check" ]; then
     shift
 fi
 ROOTFS_TREE=${1:-}
-OUT=${2:-"$REPO/dist/eon-s905x4-linux-stick.img.gz"}
+OUT=${2:-"$REPO/dist/sc2-linux-stick.img.gz"}
 
 P1_SIZE_MB=64
 P2_SIZE_MB=800
@@ -358,12 +358,19 @@ if [ -d "$HERE/overrides" ]; then
             # symlinks (a previous build copied rather than symlinked
             # them). They still carry the vendor's name in their comments,
             # and the smoke test rejects ANY vendor string in the login
-            # files. Remove them by name; ours are 01-eon-header and
-            # 15-eon-system-state, installed below.
+            # files. Remove them by name; ours are 01-sc2-header and
+            # 15-sc2-system-state, installed below.
             for f in "$dest"/*quban* "$dest"/*qubian*; do
                 [ -e "$f" ] || continue
                 rm -f "$f"
                 log "  removed the vendor's login-message file $(basename "$f")"
+            done
+            # Remove the previous build's login-message files if the tree
+            # was built before the rename. They are ours, not the vendor's.
+            for f in "$dest"/*eon*; do
+                [ -e "$f" ] || continue
+                rm -f "$f"
+                log "  removed the previous build's login-message file $(basename "$f")"
             done
             # Remove any entry with the same name first. The vendor image
             # has these as DANGLING SYMLINKS into a directory that is not
@@ -390,11 +397,15 @@ if [ -d "$HERE/overrides" ]; then
             log "  applied override: $name"
         elif [ "$name" = "etc" ]; then
             # Files that belong directly in /etc: /etc/issue,
-            # /etc/issue.net and /etc/eon-release. They replace whatever
-            # the vendor put there - in the vendor image /etc/issue and
-            # /etc/issue.net are symlinks into /usr/lib/qubian - so the
-            # destination is removed first rather than written through.
+            # /etc/issue.net, /etc/sc2-release and /etc/hostname. They
+            # replace whatever the vendor put there - in the vendor image
+            # /etc/issue and /etc/issue.net are symlinks into
+            # /usr/lib/qubian - so the destination is removed first rather
+            # than written through.
             mkdir -p "$ROOTFS_TREE/etc"
+            # The previous build's release file, if the tree was built
+            # before the rename. The new file is /etc/sc2-release.
+            rm -f "$ROOTFS_TREE/etc/eon-release"
             for f in "$src"/*; do
                 [ -e "$f" ] || continue
                 dest="$ROOTFS_TREE/etc/$(basename "$f")"
@@ -534,12 +545,15 @@ done
 #                        driver leaves the connector disabled, and a mode
 #                        set is runtime state, so it has to be done on
 #                        every boot.
-#   eon-hdmi-audio.service  routes the HDMI audio to the TDM-C path. The
+#   sc2-hdmi-audio.service  routes the HDMI audio to the TDM-C path. The
 #                        vendor's default source is Spdif, and with it the
 #                        HDMI output is silent (see docs/audio.md).
 WANTS="$ROOTFS_TREE/etc/systemd/system/multi-user.target.wants"
 mkdir -p "$WANTS"
-for u in enable-hdmi.service eon-hdmi-audio.service; do
+# The previous build's audio unit, if the tree was built before the rename.
+rm -f "$ROOTFS_TREE/etc/systemd/system/eon-hdmi-audio.service"
+rm -f "$WANTS/eon-hdmi-audio.service"
+for u in enable-hdmi.service sc2-hdmi-audio.service; do
     if [ -f "$ROOTFS_TREE/etc/systemd/system/$u" ]; then
         ln -sf "/etc/systemd/system/$u" "$WANTS/$u"
         log "  enabled $u"
@@ -570,9 +584,13 @@ EOF
 # ---------------------------------------------------------------- /etc/hosts
 # The box's own name must resolve locally. Debian normally puts
 # "127.0.1.1 <hostname>" in /etc/hosts; the vendor image has
-# "127.0.0.1 tvbox" instead, so `hostname -f` and `getent hosts eon-sc2`
+# "127.0.0.1 tvbox" instead, so `hostname -f` and `getent hosts sc2`
 # fail. That breaks anything that wants the local FQDN, and it is cheap to
 # fix here rather than on every box.
+# Remove the previous build's hostname mapping, if the tree was built
+# before the rename.
+sed -i '/^127\.0\.1\.1[[:space:]]\+eon-sc2\([[:space:]]\|$\)/d' \
+    "$ROOTFS_TREE/etc/hosts" 2>/dev/null || true
 HOSTNAME=$(cat "$ROOTFS_TREE/etc/hostname" 2>/dev/null | tr -d '[:space:]')
 if [ -n "$HOSTNAME" ]; then
     if ! grep -qE "^127\.0\.1\.1[[:space:]]+${HOSTNAME}([[:space:]]|$)" \

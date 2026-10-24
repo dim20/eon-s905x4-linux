@@ -1,23 +1,23 @@
 #!/bin/sh
-# eon-kernel-list - show the kernels this box can boot.
+# sc2-kernel-list - show the kernels this box can boot.
 #
 # Three things are listed:
 #
-#   * the versions the packages have installed, in /usr/lib/eon-kernel
+#   * the versions the packages have installed, in /usr/lib/sc2-kernel
 #   * the kernels in the archive - the ones that were on the boot
 #     partition and were replaced, kept for rollback
 #   * which one the boot partition holds now
 #
 # The archive is what makes a failed kernel recoverable: the kernel
 # that was working is kept, under its own hash, so it can be put back
-# with eon-kernel-select.
+# with sc2-kernel-select.
 
 set -e
 
 IMAGE=Image
 DTB=sc2_s905x4_ah212_linux.dtb
-LIB=/usr/lib/eon-kernel
-ARCHIVE_REL=var/lib/eon-kernel/archive
+LIB=/usr/lib/sc2-kernel
+ARCHIVE_REL=var/lib/sc2-kernel/archive
 
 hash_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1; }
 
@@ -108,4 +108,4 @@ else
     printf '  (the boot partition could not be read)\n'
 fi
 
-printf -- '\nto choose a kernel: eon-kernel-select <version>\n'
+printf -- '\nto choose a kernel: sc2-kernel-select <version>\n'

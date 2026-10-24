@@ -43,7 +43,7 @@ into the tree:
     rsync            (the installer copies the rootfs with it)
     acl              (rsync's --acls)
     tasksel          (Debian's task mechanism, kept for the later
-    tasksel-data      optional eon-desktop set; it does not produce a
+    tasksel-data      optional sc2-desktop set; it does not produce a
                       working desktop today - see docs/releases/errata-v0.6.md)
     libdrm-tests     (modetest, which enable-hdmi.sh needs)
       and its dependencies: libdrm2, libdrm-common, libdrm-amdgpu1,
@@ -63,7 +63,7 @@ complete rather than depending on the tree having been prepared:
     scripts/overrides/motd/                     our login banner, replacing
                                                the vendor's
     scripts/overrides/etc/                      /etc/issue, /etc/issue.net
-                                               and /etc/eon-release, replacing
+                                               and /etc/sc2-release, replacing
                                                the vendor's login files
     scripts/overrides/xorg.conf                 the X server configuration,
                                                if a desktop is installed

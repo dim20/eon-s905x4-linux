@@ -35,21 +35,21 @@ set -e
 # dpkg passes "configure" as the argument on a normal install and the
 # old version on an upgrade - never the new version - so the argument
 # is not the thing to ask.
-VERSION=$(dpkg-query -W -f='${Version}' eon-kernel 2>/dev/null || true)
-LIBDIR="/usr/lib/eon-kernel/$VERSION"
+VERSION=$(dpkg-query -W -f='${Version}' sc2-kernel 2>/dev/null || true)
+LIBDIR="/usr/lib/sc2-kernel/$VERSION"
 
-log() { printf 'eon-kernel: %s\n' "$*"; }
-die() { printf 'eon-kernel: ERROR: %s\n' "$*" >&2; exit 1; }
+log() { printf 'sc2-kernel: %s\n' "$*"; }
+die() { printf 'sc2-kernel: ERROR: %s\n' "$*" >&2; exit 1; }
 
 [ -n "$VERSION" ] || die "cannot determine the package's version"
 [ -d "$LIBDIR" ] || die "the package's files are missing from $LIBDIR"
 
 # The shared activation logic: write it to the boot partition, archive
 # what was there, verify the write from storage.
-if [ -x /usr/lib/eon-kernel/activate ]; then
-    /usr/lib/eon-kernel/activate "$LIBDIR" || die "the kernel was not installed"
+if [ -x /usr/lib/sc2-kernel/activate ]; then
+    /usr/lib/sc2-kernel/activate "$LIBDIR" || die "the kernel was not installed"
 else
-    die "/usr/lib/eon-kernel/activate is missing - the package was built wrong"
+    die "/usr/lib/sc2-kernel/activate is missing - the package was built wrong"
 fi
 
 log "installed kernel $VERSION"
@@ -72,7 +72,7 @@ else
     log "the U-Boot environment is not reachable; the kernel is installed"
 fi
 
-log "run 'eon-kernel-list' to see what is installed"
-log "run 'eon-kernel-select <version>' to choose which one boots"
+log "run 'sc2-kernel-list' to see what is installed"
+log "run 'sc2-kernel-select <version>' to choose which one boots"
 
 exit 0

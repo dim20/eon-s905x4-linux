@@ -16,7 +16,7 @@
 #   dist/<name>-img.gz        the stick image
 #   dist/Image                the kernel
 #   dist/sc2_s905x4_ah212_linux.dtb   the device tree
-#   dist/<name>-kernel.deb    the kernel as an installable package
+#   dist/linux-image-sc2_<version>_arm64.deb   the kernel as an installable package
 #   dist/SHA256SUMS           their checksums
 #   dist/inventory.txt        what is in the image, file by file
 #   dist/TEST-CHECKLIST.md    what a human has to do next
@@ -79,11 +79,11 @@ cp "$REPO/kernel/sc2_s905x4_ah212_linux.dtb" "$DIST/sc2_s905x4_ah212_linux.dtb"
 # The "current" asset name is what the README tells a user to download, and
 # it changes from release to release. Keep the release-named copy as well, so
 # a file can never be mistaken for a different release's.
-cp "$DIST/$NAME-img.gz" "$DIST/eon-s905x4-linux-stick.img.gz"
+cp "$DIST/$NAME-img.gz" "$DIST/sc2-linux-stick.img.gz"
 {
     echo "# $NAME"
     echo "# verify with: sha256sum -c SHA256SUMS"
-    ( cd "$DIST" && sha256sum "$NAME-img.gz" eon-s905x4-linux-stick.img.gz Image sc2_s905x4_ah212_linux.dtb )
+    ( cd "$DIST" && sha256sum "$NAME-img.gz" sc2-linux-stick.img.gz Image sc2_s905x4_ah212_linux.dtb )
 } > "$DIST/SHA256SUMS"
 cat "$DIST/SHA256SUMS"
 
@@ -95,7 +95,7 @@ echo
 echo "=== 3b. the kernel package ========================================="
 KVER=${KVER:-$(cat "$REPO/kernel/VERSION" 2>/dev/null || echo "")}
 [ -n "$KVER" ] || { echo "[release] kernel/VERSION is missing - cannot build the package" >&2; exit 1; }
-PKG="$DIST/$NAME-kernel.deb"
+PKG="$DIST/linux-image-sc2_${KVER}_arm64.deb"
 SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(date -u -d "2026-01-01" +%s)}
 export SOURCE_DATE_EPOCH
 "$REPO/scripts/build-kernel-package.sh" \
@@ -116,7 +116,7 @@ echo "[release] built $PKG"
     || { echo "[release] the kernel package FAILED the manifest - refusing to release" >&2; exit 1; }
 echo "[release] the kernel package passed the manifest"
 
-( cd "$DIST" && sha256sum "$NAME-kernel.deb" ) >> "$DIST/SHA256SUMS"
+( cd "$DIST" && sha256sum "linux-image-sc2_${KVER}_arm64.deb" ) >> "$DIST/SHA256SUMS"
 
 # ---------------------------------------------------------------- 4. the box
 echo
@@ -170,8 +170,8 @@ checks are done; these are the ones that cannot be.
 
 - [ ] Install the kernel package on the box and check that it takes:
 
-      dpkg -i $NAME-kernel.deb
-      eon-kernel-list
+      dpkg -i $(basename "$PKG")
+      sc2-kernel-list
 
       The kernel on the boot partition must be the one just installed,
       and the one that was there before must be in the ARCHIVE - that
@@ -179,13 +179,13 @@ checks are done; these are the ones that cannot be.
 
 - [ ] Check the rollback works: put the previous kernel back and reboot.
 
-      eon-kernel-select <the archived hash>
+      sc2-kernel-select <the archived hash>
       reboot
 
       The box must come up on the previous kernel. Then put the new one
       back:
 
-      eon-kernel-select <the new version>
+      sc2-kernel-select <the new version>
 EOF
 cat "$DIST/TEST-CHECKLIST.md"
 

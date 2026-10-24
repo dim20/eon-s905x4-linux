@@ -12,7 +12,7 @@ failing and the vendor's fallback is doing it — see "Why one box
 autoboots the stick and another does not" below. The install path is the
 same.
 
-The end state is the same as any other EON Linux box: Debian on the
+The end state is the same as any other SC2 Linux box: Debian on the
 eMMC, booting unattended with nothing plugged in.
 
 ---
@@ -70,7 +70,7 @@ That message is expected and harmless.
 | eMMC boot fails and no stick is inserted | the fallback chain runs out and the box stops at the U-Boot prompt |
 
 A box that autoboots the stick is therefore telling you its eMMC boot is
-broken, not that it was "unlocked to prefer USB". Installing EON Linux to
+broken, not that it was "unlocked to prefer USB". Installing SC2 Linux to
 the eMMC fixes that, because the installer replaces the boot command and
 the boot partition.
 
@@ -168,7 +168,7 @@ What it does:
    stick's p1 and boots Linux with `root=/dev/sda2`.
 
 You should see the kernel boot, `fbcon: Taking over console`, and the
-EON Linux banner and login on the serial console. If the USB stick is
+SC2 Linux banner and login on the serial console. If the USB stick is
 present and the script is intact, this is a **non-destructive** boot:
 nothing is written to the eMMC.
 

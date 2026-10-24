@@ -2,7 +2,7 @@
 # prerm - the package is being removed.
 #
 # The kernel on the boot partition is NOT touched. Removing the package
-# removes the copy under /usr/lib/eon-kernel; the one on the boot
+# removes the copy under /usr/lib/sc2-kernel; the one on the boot
 # partition stays, because that is the one the box boots, and deleting
 # it would leave the box unable to boot.
 #
@@ -12,7 +12,7 @@
 
 set -e
 
-printf 'eon-kernel: the kernel on the boot partition has been left alone\n'
-printf 'eon-kernel: removing this package does not stop the box from booting\n'
+printf 'sc2-kernel: the kernel on the boot partition has been left alone\n'
+printf 'sc2-kernel: removing this package does not stop the box from booting\n'
 
 exit 0

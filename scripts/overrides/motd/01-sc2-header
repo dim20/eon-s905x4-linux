@@ -1,5 +1,5 @@
 #!/bin/sh
-# 01-eon-header — the banner at the top of the login message.
+# 01-sc2-header — the banner at the top of the login message.
 #
 # WHY THIS IS NOT THE VENDOR'S VERSION
 #
@@ -16,11 +16,11 @@
 #
 # Everything below is plain ASCII, so it renders identically on the TV,
 # on the serial console and over SSH. The identity comes from
-# /etc/eon-release; Debian's own /etc/os-release is left alone and still
+# /etc/sc2-release; Debian's own /etc/os-release is left alone and still
 # truthfully says Debian.
 
-[ -r /etc/eon-release ] && . /etc/eon-release
+[ -r /etc/sc2-release ] && . /etc/sc2-release
 
-echo "  ${NAME:-EON Linux} - ${BASE:-Debian}"
-echo "  eon-s905x4-linux - Debian for the EON SDSTB02 (Amlogic S905X4 / SC2)"
+echo "  ${NAME:-SC2 Linux} - ${BASE:-Debian}"
+echo "  sc2-linux - Debian for the EON SDSTB02 (Amlogic S905X4 / SC2)"
 echo

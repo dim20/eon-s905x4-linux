@@ -3,7 +3,7 @@
 #
 #   scripts/deploy-kernel.sh <host> [options]
 #
-#   <host>        the box, as [user@]host. Or set EON_HOST.
+#   <host>        the box, as [user@]host. Or set SC2_HOST.
 #   --image FILE  the Image to send (default: kernel/Image in this repo)
 #   --p1 DEV      also write it to a boot partition on the box, e.g.
 #                 /dev/mmcblk0p1 (eMMC) or /dev/sda1 (a USB stick). The
@@ -63,8 +63,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-HOSTARG="${HOSTARG:-${EON_HOST:-}}"
-[ -n "$HOSTARG" ] || { echo "no host given (pass one, or set EON_HOST)" >&2; usage; }
+HOSTARG="${HOSTARG:-${SC2_HOST:-}}"
+[ -n "$HOSTARG" ] || { echo "no host given (pass one, or set SC2_HOST)" >&2; usage; }
 
 # [user@]host, with --user overriding the user part.
 case "$HOSTARG" in
@@ -87,11 +87,11 @@ SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10
           -o PreferredAuthentications=password,keyboard-interactive,publickey)
 [ -n "$PORT" ] && SSH_OPTS+=(-p "$PORT")
 
-# sshpass is used only if EON_PASS is set; otherwise ssh uses keys or prompts.
+# sshpass is used only if SC2_PASS is set; otherwise ssh uses keys or prompts.
 SUDO_SSH=""
-if [ -n "${EON_PASS:-}" ]; then
-    command -v sshpass >/dev/null || die "EON_PASS is set but sshpass is not installed"
-    SUDO_SSH="sshpass -p $EON_PASS"
+if [ -n "${SC2_PASS:-}" ]; then
+    command -v sshpass >/dev/null || die "SC2_PASS is set but sshpass is not installed"
+    SUDO_SSH="sshpass -p $SC2_PASS"
 fi
 
 sshcmd() { $SUDO_SSH ssh "${SSH_OPTS[@]}" "$TARGET" "$@"; }
@@ -105,7 +105,7 @@ log "the box answered."
 
 # ---------------------------------------------------------------- send
 # Resumable, retried, and only believed after a hash.
-MAX_TRIES=${EON_TRIES:-8}
+MAX_TRIES=${SC2_TRIES:-8}
 attempt=0
 while :; do
     attempt=$((attempt + 1))

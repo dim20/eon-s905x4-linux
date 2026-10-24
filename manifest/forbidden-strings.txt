@@ -22,9 +22,12 @@
 #                     from. It is credited in docs/licensing.md, which is
 #                     the right place for it; it is not our product name
 #                     and must not greet the user as if it were.
+#   EON Linux         the old product name. EON is the vendor's brand; the
+#                     product is SC2 Linux. "EON SDSTB02" is allowed as a
+#                     descriptive hardware reference; "EON Linux" is not.
 #
-# The identity we do ship is in /etc/eon-release, /etc/issue, /etc/issue.net
-# and /etc/update-motd.d/01-eon-header. See plan/HOUSEKEEPING.md §4.
+# The identity we do ship is in /etc/sc2-release, /etc/issue, /etc/issue.net
+# and /etc/update-motd.d/01-sc2-header. See plan/HOUSEKEEPING.md §4.
 
 /etc/issue QUBIAN
 /etc/issue qubian
@@ -36,11 +39,17 @@
 /etc/issue.net DEVMFC
 /etc/issue.net devmfc
 /etc/issue.net DEV MFC
-/etc/update-motd.d/01-eon-header QUBIAN
-/etc/update-motd.d/01-eon-header qubian
-/etc/update-motd.d/01-eon-header DEVMFC
-/etc/update-motd.d/01-eon-header devmfc
-/etc/update-motd.d/15-eon-system-state QUBIAN
-/etc/update-motd.d/15-eon-system-state qubian
-/etc/update-motd.d/15-eon-system-state DEVMFC
-/etc/update-motd.d/15-eon-system-state devmfc
+/etc/update-motd.d/01-sc2-header QUBIAN
+/etc/update-motd.d/01-sc2-header qubian
+/etc/update-motd.d/01-sc2-header DEVMFC
+/etc/update-motd.d/01-sc2-header devmfc
+/etc/update-motd.d/15-sc2-system-state QUBIAN
+/etc/update-motd.d/15-sc2-system-state qubian
+/etc/update-motd.d/15-sc2-system-state DEVMFC
+/etc/update-motd.d/15-sc2-system-state devmfc
+/etc/issue EON Linux
+/etc/issue.net EON Linux
+/etc/sc2-release EON Linux
+/etc/sc2-release eon-s905x4-linux
+/etc/update-motd.d/01-sc2-header EON Linux
+/etc/update-motd.d/15-sc2-system-state EON Linux

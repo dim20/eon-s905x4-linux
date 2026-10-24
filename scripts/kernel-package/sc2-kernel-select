@@ -1,8 +1,8 @@
 #!/bin/sh
-# eon-kernel-select - choose which kernel this box boots.
+# sc2-kernel-select - choose which kernel this box boots.
 #
-#     eon-kernel-select list
-#     eon-kernel-select <version-or-hash>
+#     sc2-kernel-select list
+#     sc2-kernel-select <version-or-hash>
 #
 # This is the rollback. When a new kernel does not boot, the box is
 # reachable through the recovery ladder (see docs/recovery.md) - the
@@ -23,18 +23,18 @@ set -e
 
 IMAGE=Image
 DTB=sc2_s905x4_ah212_linux.dtb
-LIB=/usr/lib/eon-kernel
-ARCHIVE_REL=var/lib/eon-kernel/archive
-BACKUP=/var/lib/eon-kernel/env-backup
+LIB=/usr/lib/sc2-kernel
+ARCHIVE_REL=var/lib/sc2-kernel/archive
+BACKUP=/var/lib/sc2-kernel/env-backup
 
-log() { printf 'eon-kernel: %s\n' "$*"; }
-die() { printf 'eon-kernel: ERROR: %s\n' "$*" >&2; exit 1; }
+log() { printf 'sc2-kernel: %s\n' "$*"; }
+die() { printf 'sc2-kernel: ERROR: %s\n' "$*" >&2; exit 1; }
 
-[ $# -ge 1 ] || { echo "usage: eon-kernel-select <version-or-hash>" >&2; exit 2; }
+[ $# -ge 1 ] || { echo "usage: sc2-kernel-select <version-or-hash>" >&2; exit 2; }
 
 # ------------------------------------------------------------------ list
 if [ "$1" = "list" ]; then
-    exec /usr/sbin/eon-kernel-list
+    exec /usr/sbin/sc2-kernel-list
 fi
 
 [ "$(id -u)" -eq 0 ] || die "must run as root"
@@ -90,7 +90,7 @@ cleanup() {
 trap cleanup EXIT
 
 # ------------------------------------------------------------------ find it
-# A version is a directory under /usr/lib/eon-kernel; a hash is a
+# A version is a directory under /usr/lib/sc2-kernel; a hash is a
 # directory in the archive. Either is a directory holding a kernel.
 src=""
 for d in "$LIB/$want" "$ARCHIVE/$want"; do
@@ -112,7 +112,7 @@ fi
 
 [ -n "$src" ] || {
     echo "no kernel matches '$want'" >&2
-    echo "run 'eon-kernel-select list' to see what is installed" >&2
+    echo "run 'sc2-kernel-select list' to see what is installed" >&2
     exit 1
 }
 
@@ -122,10 +122,10 @@ log "using $ver"
 # ------------------------------------------------------------------ install it
 # The shared activation logic archives whatever is on the boot
 # partition, writes the chosen kernel, and verifies the write.
-if [ -x /usr/lib/eon-kernel/activate ]; then
-    /usr/lib/eon-kernel/activate "$src" || die "the kernel was not installed"
+if [ -x /usr/lib/sc2-kernel/activate ]; then
+    /usr/lib/sc2-kernel/activate "$src" || die "the kernel was not installed"
 else
-    die "/usr/lib/eon-kernel/activate is missing - the package was built wrong"
+    die "/usr/lib/sc2-kernel/activate is missing - the package was built wrong"
 fi
 
 # ------------------------------------------------------------------ the environment

@@ -96,12 +96,12 @@ done < <(find . -name '*.md' -not -path './.git/*' -print | sort)
 # an image at all.
 BRAND_FILES=(scripts/overrides/etc/issue
              scripts/overrides/etc/issue.net
-             scripts/overrides/etc/eon-release
-             scripts/overrides/motd/01-eon-header
-             scripts/overrides/motd/15-eon-system-state)
+             scripts/overrides/etc/sc2-release
+             scripts/overrides/motd/01-sc2-header
+             scripts/overrides/motd/15-sc2-system-state)
 for f in "${BRAND_FILES[@]}"; do
     [ -f "$f" ] || continue
-    if grep -Eqi 'qubian|dev[[:space:]]*mfc' "$f"; then
+    if grep -Eqi 'qubian|dev[[:space:]]*mfc|EON Linux' "$f"; then
         fail "$f contains a vendor string (QUBIAN/qubian or DEVMFC/devmfc)"
     else
         ok
@@ -111,9 +111,9 @@ done
 # ---------------------------------------------------------------- sources
 # Every login file the manifest requires must come from an override, or a
 # rename lands in the manifest while the build quietly keeps the old file.
-for path in /etc/issue /etc/issue.net /etc/eon-release \
-            /etc/update-motd.d/01-eon-header \
-            /etc/update-motd.d/15-eon-system-state; do
+for path in /etc/issue /etc/issue.net /etc/sc2-release \
+            /etc/update-motd.d/01-sc2-header \
+            /etc/update-motd.d/15-sc2-system-state; do
     grep -qE "^${path}([[:space:]]|$)" manifest/required-paths.txt || continue
     case "$path" in
         /etc/update-motd.d/*) src="scripts/overrides/motd/$(basename "$path")" ;;

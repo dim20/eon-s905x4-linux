@@ -56,14 +56,14 @@ SRC="${1:-}"
 
 IMAGE=Image
 DTB=sc2_s905x4_ah212_linux.dtb
-ARCHIVE_REL=var/lib/eon-kernel/archive
+ARCHIVE_REL=var/lib/sc2-kernel/archive
 MAX_ARCHIVED=5
 
-log() { printf 'eon-kernel: %s\n' "$*"; }
-die() { printf 'eon-kernel: ERROR: %s\n' "$*" >&2; exit 1; }
+log() { printf 'sc2-kernel: %s\n' "$*"; }
+die() { printf 'sc2-kernel: ERROR: %s\n' "$*" >&2; exit 1; }
 
 # ------------------------------------------------------------- the payload
-# A directory under /usr/lib/eon-kernel carries a SHA256SUMS, and the
+# A directory under /usr/lib/sc2-kernel carries a SHA256SUMS, and the
 # kernel in it must match. A directory in the archive does not: it is
 # keyed by the hash of the kernel it holds, so the hash IS the check.
 if [ -f "$SRC/SHA256SUMS" ]; then

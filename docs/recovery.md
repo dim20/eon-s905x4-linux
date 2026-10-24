@@ -22,7 +22,7 @@ Try these in order. Each is less invasive than the next.
 |---|---|---|---|
 | 1 | **UART console** | CP210x adapter on the UART pads, 1 Mbaud | none |
 | 2 | **The USB stick** | a stick flashed with the published image | none |
-| 3 | **`eon-kernel-select`** | a shell, and the kernel package installed | none |
+| 3 | **`sc2-kernel-select`** | a shell, and the kernel package installed | none |
 | 4 | **Button + USB A–A** → DNL → fastboot | USB A–A cable | low |
 | 5 | **Reflash the bootloader** | DNL/fastboot write access | moderate |
 
@@ -222,7 +222,7 @@ This is the commonest failure, and the one the recovery ladder is best at.
 If the kernel was installed with the package
 ([`kernel-package.md`](kernel-package.md)), then the kernel that was
 working is **archived** — copied to
-`/var/lib/eon-kernel/archive/<its hash>/` on the root filesystem of the
+`/var/lib/sc2-kernel/archive/<its hash>/` on the root filesystem of the
 installation, before the new one was put on the boot partition.
 
 So the recovery is:
@@ -231,12 +231,12 @@ So the recovery is:
    U-Boot prompt over the serial console (section 1).
 2. Put the archived kernel back:
    ```sh
-   eon-kernel-list          # what is there
-   eon-kernel-select <hash> # put one back
+   sc2-kernel-list          # what is there
+   sc2-kernel-select <hash> # put one back
    reboot
    ```
 
-`eon-kernel-select` writes the kernel to the boot partition, verifies the
+`sc2-kernel-select` writes the kernel to the boot partition, verifies the
 write by reading it back from the filesystem, and leaves the boot command
 alone — it names fixed files, so a rollback is a file copy.
 

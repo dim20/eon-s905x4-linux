@@ -9,9 +9,14 @@ an **errata** file next to it — never by rewriting the note.
 |---|---|
 | `v0.1-testbox.md` … `v0.6-desktop.md` | the published notes, in order |
 | `v0.7-tty.md` | the TTY release, and what changed since v0.6; its later stick boot is recorded in `errata-v0.7.md` Addendum 1 |
-| `v0.7.1-tty.md` | the current release: the fixes that did not make v0.7 |
+| `v0.7.1-tty.md` | the last release under the EON name: the fixes that did not make v0.7 |
+| `v0.7.2-sc2.md` | the rename release: the same kernel and image changes as v0.7.1-tty, new branding. Built and manifest-checked; hardware test pending |
 | `errata-v0.6.md` | what v0.6 got wrong, and what to do if you have it |
 | `errata-v0.7.md` | corrections and addenda for v0.7-tty |
+
+Releases up to and including `v0.7.1-tty` were published under the earlier
+**EON Linux** name. They are kept as historical artefacts; `v0.7.2-sc2`
+is the first release under the **SC2 Linux** name.
 
 ## The checklist for a release
 
@@ -27,8 +32,8 @@ artefact, not a memory.
    that fails is a defect in the release, not a rule to relax.
 4. **Check the docs** with `scripts/check-docs.sh`. It must exit 0.
 5. **Name the assets by release** and record their sizes and SHA256
-   values. `eon-s905x4-linux-stick.img.gz` is the current asset name;
-   keep a release-named copy (`v0.7-tty-img.gz`) so it can never be
+   values. `sc2-linux-stick.img.gz` is the current asset name;
+   keep a release-named copy (`v0.7.2-img.gz`) so it can never be
    mistaken for another release.
 6. **Write `vX.Y-name.md`** with: the status line, the assets and their
    hashes, what changed and why, what is *not* fixed, and `Last verified`

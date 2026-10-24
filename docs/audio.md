@@ -57,7 +57,7 @@ either. The mixer control is the difference.
 
 ## Making it the default
 
-The image ships `eon-hdmi-audio.service`, a oneshot unit that runs the two
+The image ships `sc2-hdmi-audio.service`, a oneshot unit that runs the two
 `amixer` lines above at boot, after `sound.target` and after
 `alsa-restore.service`. Without it a fresh image is silent on HDMI until
 someone sets the control by hand.

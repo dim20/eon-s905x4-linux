@@ -1,5 +1,5 @@
 #!/bin/sh
-# 15-eon-system-state — the state of the system, printed at login.
+# 15-sc2-system-state — the state of the system, printed at login.
 #
 # WHY THIS IS NOT THE VENDOR'S VERSION
 #

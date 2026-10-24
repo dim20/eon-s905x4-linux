@@ -1,4 +1,4 @@
-From: eon-s905x4-linux
+From: sc2-linux
 Subject: [PATCH] console: bind the framebuffer console to the display, and give it a size
 
 Three changes that together make the text console work on the HDMI output.

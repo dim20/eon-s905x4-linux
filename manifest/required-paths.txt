@@ -31,7 +31,7 @@
 /etc/systemd/system/enable-hdmi.service 0644
 # Routes the HDMI audio to TDM-C at boot, because the vendor default
 # (Spdif) leaves the HDMI output silent. See docs/audio.md.
-/etc/systemd/system/eon-hdmi-audio.service 0644
+/etc/systemd/system/sc2-hdmi-audio.service 0644
 # chrony-wait.service cannot set up a user namespace on this kernel
 # (CONFIG_USER_NS is unset), so it fails and leaves the system "degraded"
 # with one failed unit even though everything works. The drop-in disables
@@ -50,13 +50,13 @@
 # the vendor's symlinks into /usr/lib/qubian. The build installs all four
 # from scripts/overrides/ (see the "etc" and "motd" cases), so they are
 # reproduced by a build rather than hand-edited on a box. The product
-# identity lives in /etc/eon-release; /etc/os-release is untouched and
+# identity lives in /etc/sc2-release; /etc/os-release is untouched and
 # still says Debian, which is true.
 /etc/issue 0644
 /etc/issue.net 0644
-/etc/eon-release 0644
-/etc/update-motd.d/01-eon-header 0755
-/etc/update-motd.d/15-eon-system-state 0755
+/etc/sc2-release 0644
+/etc/update-motd.d/01-sc2-header 0755
+/etc/update-motd.d/15-sc2-system-state 0755
 
 # --- the programs the image's own scripts and services need --------------
 /usr/bin/rsync 0755

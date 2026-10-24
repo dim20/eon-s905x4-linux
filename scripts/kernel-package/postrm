@@ -7,7 +7,7 @@
 
 set -e
 
-printf 'eon-kernel: the archived kernels have been kept, for rollback\n'
-printf "eon-kernel: run 'eon-kernel-select list' to see them\n"
+printf 'sc2-kernel: the archived kernels have been kept, for rollback\n'
+printf "sc2-kernel: run 'sc2-kernel-select list' to see them\n"
 
 exit 0

@@ -3,7 +3,7 @@
 Start here. This page is the map, and it says which document is the
 authority when two of them disagree.
 
-The product is **EON Linux**: Debian on the EON SDSTB02 (Amlogic
+The product is **SC2 Linux**: Debian on the EON SDSTB02 (Amlogic
 S905X4 / SC2) set-top box, booting unattended from eMMC with a text
 console on HDMI and SSH over the network. It is meant to be a small
 general-purpose Linux computer. It is not a media centre.
@@ -61,10 +61,18 @@ When two sources disagree, the higher one wins.
   at about 12–18 s (`fbcon: Taking over console`, then
   `Console: switching to colour frame buffer device 240x67`), because no
   display manager is running.
-- The **latest release is v0.7.1-tty** (2026-10-24), the text-console
-  product with HDMI audio, the clock fallback, the hostname fix and the
-  smoke test. See [`../README.md`](../README.md) and
+- The **latest build is v0.7.2-sc2** (2026-10-25), the SC2 Linux rename: the
+  same kernel and image changes as v0.7.1-tty, with new branding. It is
+  built and manifest-checked; the hardware smoke test is still pending, so
+  it is not yet a published release. See
+  [`releases/v0.7.2-sc2.md`](releases/v0.7.2-sc2.md).
+- The **last release verified on the box is v0.7.1-tty** (2026-10-24), the
+  text-console product with HDMI audio, the clock fallback, the hostname
+  fix and the smoke test. See [`../README.md`](../README.md) and
   [`releases/v0.7.1-tty.md`](releases/v0.7.1-tty.md).
+- The **product and repository were renamed from EON Linux to SC2 Linux**
+  for v0.7.2. Releases up to v0.7.1-tty keep the earlier name as history;
+  v0.7.2 is the first SC2 Linux release.
 - The **v0.7.1 image has been exercised end-to-end**: written to a stick,
   read back in full with `cmp`, booted on the box; the text console came
   up, the root was `/dev/sda2`, and `smoke-test.sh` passed **24/24,

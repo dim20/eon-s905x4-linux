@@ -28,7 +28,7 @@
 #
 # THE EXPECTED KERNEL
 #
-#   If the eon-kernel package is installed, its SHA256SUMS is the authority:
+#   If the sc2-kernel package is installed, its SHA256SUMS is the authority:
 #   the kernel on p1 must match the kernel the package installed. If the
 #   package is not installed (an image written straight to eMMC, as the
 #   installer does), the constants below are used. Update them when the
@@ -39,7 +39,7 @@
 
 set -uo pipefail
 
-# The kernel this script was shipped with. Overridden by the eon-kernel
+# The kernel this script was shipped with. Overridden by the sc2-kernel
 # package's own SHA256SUMS when that package is installed.
 EXPECT_IMAGE=${EXPECT_IMAGE:-45a677435e2af01c5c77dd60692f60ce9482eaa51725fd983717e552d873c0d0}
 EXPECT_DTB=${EXPECT_DTB:-d1e2267f5e945acff73f7a8973af9fcbb2d777faf26771e2a7e75687537ffda8}
@@ -70,23 +70,23 @@ section() { [ "$QUIET" = 1 ] || { echo; echo "=== $* ==="; }; }
 
 # ---------------------------------------------------------------- 1. identity
 section "identity"
-if [ -f /etc/eon-release ]; then
-    ok "/etc/eon-release exists"
-    if grep -q '^NAME="EON Linux"' /etc/eon-release; then
-        ok "the product name is EON Linux"
+if [ -f /etc/sc2-release ]; then
+    ok "/etc/sc2-release exists"
+    if grep -q '^NAME="SC2 Linux"' /etc/sc2-release; then
+        ok "the product name is SC2 Linux"
     else
-        fail "/etc/eon-release does not say NAME=\"EON Linux\""
+        fail "/etc/sc2-release does not say NAME=\"SC2 Linux\""
     fi
 else
-    fail "/etc/eon-release is missing"
+    fail "/etc/sc2-release is missing"
 fi
 
 for f in /etc/issue /etc/issue.net; do
     if [ -f "$f" ]; then
-        if grep -q 'EON Linux' "$f"; then
-            ok "$f carries the EON Linux banner"
+        if grep -q 'SC2 Linux' "$f"; then
+            ok "$f carries the SC2 Linux banner"
         else
-            fail "$f does not carry the EON Linux banner"
+            fail "$f does not carry the SC2 Linux banner"
         fi
     else
         fail "$f is missing"
@@ -95,7 +95,7 @@ done
 
 # The vendor's strings must not survive in anything a user reads at login.
 vendor=$(grep -rilE 'qubian|quban|devmfc' \
-         /etc/issue /etc/issue.net /etc/eon-release /etc/motd \
+         /etc/issue /etc/issue.net /etc/sc2-release /etc/motd \
          /etc/update-motd.d 2>/dev/null || true)
 if [ -z "$vendor" ]; then
     ok "no vendor branding strings in the login files"
@@ -207,20 +207,20 @@ if [ -b "$P1" ]; then
         mnt=$(mktemp -d)
         if mount -o ro "$P1" "$mnt" 2>/dev/null; then
             # If the kernel package is installed, it is the authority.
-            if dpkg-query -W -f='${Version}' eon-kernel >/dev/null 2>&1; then
-                kver=$(dpkg-query -W -f='${Version}' eon-kernel 2>/dev/null)
-                sums="/usr/lib/eon-kernel/$kver/SHA256SUMS"
+            if dpkg-query -W -f='${Version}' sc2-kernel >/dev/null 2>&1; then
+                kver=$(dpkg-query -W -f='${Version}' sc2-kernel 2>/dev/null)
+                sums="/usr/lib/sc2-kernel/$kver/SHA256SUMS"
                 if [ -f "$sums" ]; then
                     eimg=$(awk '$2=="Image"{print $1}' "$sums")
                     edtb=$(awk '$2=="sc2_s905x4_ah212_linux.dtb"{print $1}' "$sums")
                     [ -n "$eimg" ] && EXPECT_IMAGE=$eimg
                     [ -n "$edtb" ] && EXPECT_DTB=$edtb
-                    note "expected hashes come from eon-kernel $kver"
+                    note "expected hashes come from sc2-kernel $kver"
                 else
-                    warn "eon-kernel is installed but $sums is missing"
+                    warn "sc2-kernel is installed but $sums is missing"
                 fi
             else
-                note "eon-kernel is not installed; using the built-in hashes"
+                note "sc2-kernel is not installed; using the built-in hashes"
             fi
 
             got=$(sha256sum "$mnt/Image" 2>/dev/null | cut -d' ' -f1 || true)

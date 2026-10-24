@@ -71,9 +71,9 @@ adduser
 # the desktop is frozen until after v0.7-tty.
 #
 # tasksel and tasksel-data are in the base because the next phase will
-# build the optional `eon-desktop` package set on Debian's own task
+# build the optional `sc2-desktop` package set on Debian's own task
 # mechanism, and because removing them from an existing image means
-# editing dpkg by hand. When `eon-desktop` lands, it should wrap or
+# editing dpkg by hand. When `sc2-desktop` lands, it should wrap or
 # replace tasksel rather than depend on the user knowing which task to
 # pick. Until then, running tasksel installs a desktop whose text is
 # wrong. The build keeps them present; it does not advertise them.
