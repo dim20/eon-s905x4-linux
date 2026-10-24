@@ -68,7 +68,9 @@ When two sources disagree, the higher one wins.
   read back in full with `cmp`, booted on the box; the text console came
   up, the root was `/dev/sda2`, and `smoke-test.sh` passed **24/24,
   exit 0**. That boot is what closed the two branding/unit defects the
-  first build had.
+  first build had. It was then **installed on the eMMC and cold-booted
+  with no stick present**: it came up on `/dev/mmcblk0p2`, 0 failed
+  units, and passed the smoke test again.
 - The **desktop is frozen** and returns as an optional package set. The
   v0.6 asset was *named* for a desktop it does not contain; its terminal
   text was unreadable in the box's own desktop install. See
